@@ -41,7 +41,9 @@ app = FastAPI()
 @app.post("/package-register")
 async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
-
+    
+    client_ip = request.client.host
+    
     # Generate a secret and token
     secret = secrets.token_hex(16)
     token = secrets.token_urlsafe(32)
@@ -49,6 +51,7 @@ async def package_register(request: Request, data: DeveloperDetails):
     # Prepare the data to insert into MongoDB
     developer_data = data.dict()
     developer_data["headers"] = headers
+    developer_data["client_ip"] = client_ip
     developer_data["secret"] = secret
     developer_data["token"] = token
     developer_data["registered_at"] = datetime.datetime.utcnow()
