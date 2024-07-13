@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from pymongo import MongoClient
 from fastapi import FastAPI, Request, HTTPException, File, UploadFile, Form
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
 import secrets
 import datetime
 import yaml
@@ -36,14 +37,21 @@ collection_point_collection = db["collection_points"]
 
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.post("/package-register")
 async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
-    
+
     client_ip = request.client.host
-    
+
     # Generate a secret and token
     secret = secrets.token_hex(16)
     token = secrets.token_urlsafe(32)
@@ -322,6 +330,7 @@ async def post_collection_point(
             status_code=500,
         )
 
+
 @app.post("/update-collection-point")
 async def update_collection_point(
     yaml_file: UploadFile = File(...), secret: str = Form(...), token: str = Form(...)
@@ -379,8 +388,7 @@ async def update_collection_point(
                     }
 
                     result = collection_point_collection.update_one(
-                        {"_id": existing_cp["_id"]},
-                        {"$set": update_data}
+                        {"_id": existing_cp["_id"]}, {"$set": update_data}
                     )
 
                     if result.modified_count > 0:
@@ -398,6 +406,7 @@ async def update_collection_point(
             content={"message": f"Failed to process request. Error: {str(e)}"},
             status_code=500,
         )
+
 
 @app.get("/get-collection-points")
 async def get_collection_points(secret: str, token: str):
