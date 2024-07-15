@@ -190,8 +190,10 @@ async def create_collection_point(data: CollectionPointRequest):
     # Update YAML template with cp_id
     with open(f"{data.org_id}_applications.yaml", "r") as yaml_file:
         yaml_data = yaml.safe_load(yaml_file)
-    collection_point_data["_id"] = str(collection_point_data["_id"])
+    # collection_point_data["_id"] = str(collection_point_data["_id"])
+    del collection_point_data["_id"]
     collection_point_data["registered_at"] = str(collection_point_data["registered_at"])
+    
     for application in yaml_data["applications"]:
         if application["application_id"] == data.app_id:
             application["collection_points"].append(
