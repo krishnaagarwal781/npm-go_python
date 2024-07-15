@@ -52,8 +52,7 @@ async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
     client_ip = request.client.host
 
-    # Generate org_id, org_key, and org_secret
-    org_id = secrets.token_hex(8)
+    # Generate org_key and org_secret
     org_key = secrets.token_urlsafe(16)
     org_secret = secrets.token_urlsafe(32)
 
@@ -61,7 +60,6 @@ async def package_register(request: Request, data: DeveloperDetails):
     developer_data = data.dict()
     developer_data["headers"] = headers
     developer_data["client_ip"] = client_ip
-    developer_data["org_id"] = org_id
     developer_data["org_key"] = org_key
     developer_data["org_secret"] = org_secret
     developer_data["registered_at"] = datetime.datetime.utcnow()
@@ -73,14 +71,26 @@ async def package_register(request: Request, data: DeveloperDetails):
             status_code=500, detail="Failed to insert developer details"
         )
 
-    # Insert data into organisation collection
+    # Get the generated ObjectId and convert it to string
+    inserted_dev_id = str(dev_result.inserted_id)
+
+    # Update developer_details collection with string format organisation_id
+
+    # Insert data into organisation collection using the inserted ObjectId
     organisation_data = {
         "organisation_name": data.organisation_name,
         "developer_email": data.developer_email,
-        "developer_details_id": str(dev_result.inserted_id),
+        "developer_details_id": inserted_dev_id,
         "registered_at": datetime.datetime.utcnow(),
     }
     org_result = organisation_collection.insert_one(organisation_data)
+    inserted_org_id = str(org_result.inserted_id)
+
+    developer_details_collection.update_one(
+        {"_id": ObjectId(inserted_dev_id)},
+        {"$set": {"organisation_id": inserted_org_id}},
+    )
+
     if not org_result.acknowledged:
         raise HTTPException(
             status_code=500, detail="Failed to insert organisation details"
@@ -88,15 +98,21 @@ async def package_register(request: Request, data: DeveloperDetails):
 
     # Save secrets in .env file and consent.md file
     with open(".env", "w") as f:
-        f.write(f"ORG_ID={org_id}\nORG_KEY={org_key}\nORG_SECRET={org_secret}\n")
+        f.write(
+            f"ORG_ID={inserted_org_id}\nORG_KEY={org_key}\nORG_SECRET={org_secret}\n"
+        )
     with open("consent.md", "w") as f:
         f.write("## Consent Manager Documentation\n")
-        f.write(f"### Organisation ID: {org_id}\n")
+        f.write(f"### Organisation ID: {inserted_dev_id}\n")
         f.write(f"### Organisation Key: {org_key}\n")
         f.write(f"### Organisation Secret: {org_secret}\n")
 
     return JSONResponse(
-        content={"org_id": org_id, "org_key": org_key, "org_secret": org_secret}
+        content={
+            "org_id": inserted_dev_id,
+            "org_key": org_key,
+            "org_secret": org_secret,
+        }
     )
 
 
@@ -109,7 +125,7 @@ async def create_application(
 ):
     # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
-        {"org_id": org_id, "org_key": org_key, "org_secret": org_secret}
+        {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
@@ -148,17 +164,17 @@ async def create_application(
 async def create_collection_point(data: CollectionPointRequest):
     # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
-        {"org_id": data.org_id, "org_key": data.org_key, "org_secret": data.org_secret}
+        {
+            "organisation_id": data.org_id,
+            "org_key": data.org_key,
+            "org_secret": data.org_secret,
+        }
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Generate cp_id
-    cp_id = secrets.token_hex(8)
-
     # Prepare the data to insert into MongoDB
     collection_point_data = data.dict()
-    collection_point_data["cp_id"] = cp_id
     collection_point_data["registered_at"] = datetime.datetime.utcnow()
 
     # Insert data into collection_point_collection
@@ -168,7 +184,10 @@ async def create_collection_point(data: CollectionPointRequest):
             status_code=500, detail="Failed to insert collection point details"
         )
 
-    # Update YAML template
+    # Get the inserted _id from MongoDB and convert it to string for cp_id
+    cp_id = str(cp_result.inserted_id)
+
+    # Update YAML template with cp_id
     with open(f"{data.org_id}_applications.yaml", "r") as yaml_file:
         yaml_data = yaml.safe_load(yaml_file)
     collection_point_data["_id"] = str(collection_point_data["_id"])
@@ -176,7 +195,7 @@ async def create_collection_point(data: CollectionPointRequest):
     for application in yaml_data["applications"]:
         if application["application_id"] == data.app_id:
             application["collection_points"].append(
-                {"collection_point_id": str(cp_id), "cp_details": collection_point_data}
+                {"collection_point_id": cp_id, "cp_details": collection_point_data}
             )
 
     with open(f"{data.org_id}_applications.yaml", "w") as yaml_file:
@@ -196,7 +215,7 @@ async def push_yaml(
 
     # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
-        {"org_id": org_id, "org_key": org_key, "org_secret": org_secret}
+        {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
@@ -223,7 +242,7 @@ async def push_yaml(
 
                 if existing_cp:
                     # Update existing collection point
-                    del cp["cp_details"]['_id']
+                    del cp["cp_details"]["_id"]
                     result = collection_point_collection.update_one(
                         {"_id": existing_cp["_id"]}, {"$set": cp["cp_details"]}
                     )
@@ -263,14 +282,14 @@ async def delete_collection_point(
     try:
         # Verify org_key and org_secret
         organisation = developer_details_collection.find_one(
-            {"org_id": org_id, "org_key": org_key, "org_secret": org_secret}
+            {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
         )
         if not organisation:
             raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
         # Delete the collection point from the database
         delete_result = collection_point_collection.delete_one(
-            {"org_id": org_id, "app_id": app_id, "cp_id": cp_id}
+            {"org_id": org_id, "app_id": app_id, "_id": ObjectId(cp_id)}
         )
         if delete_result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Collection point not found")
@@ -311,7 +330,7 @@ async def get_collection_point(
     try:
         # Verify org_key and org_secret
         organisation = developer_details_collection.find_one(
-            {"org_id": org_id, "org_key": org_key, "org_secret": org_secret}
+            {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
         )
         if not organisation:
             raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
