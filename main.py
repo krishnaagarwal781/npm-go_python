@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from pymongo import MongoClient
 from fastapi import FastAPI, Request, HTTPException, File, UploadFile, Form
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import secrets
 import datetime
@@ -258,11 +258,11 @@ async def push_yaml(
 
 @app.delete("/delete-collection-point")
 async def delete_collection_point(
-    org_id: str = Form(...),
-    app_id: str = Form(...),
-    org_key: str = Form(...),
-    org_secret: str = Form(...),
-    cp_id: str = Form(...),
+    org_id: str,
+    app_id: str,
+    org_key: str,
+    org_secret: str,
+    cp_id: str,
 ):
     try:
         # Verify org_key and org_secret
@@ -272,7 +272,7 @@ async def delete_collection_point(
         if not organisation:
             raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-        # Delete collection point from the database
+        # Delete the collection point from the database
         delete_result = collection_point_collection.delete_one(
             {"org_id": org_id, "app_id": app_id, "cp_id": cp_id}
         )
@@ -339,11 +339,11 @@ async def get_collection_point(
 
 @app.patch("/post-collection-point")
 async def post_collection_point(
-    org_id: str = Form(...),
-    app_id: str = Form(...),
-    org_key: str = Form(...),
-    org_secret: str = Form(...),
-    dp_id: str = Form(...),
+    org_id: str,
+    app_id: str,
+    org_key: str,
+    org_secret: str,
+    dp_id: str,
 ):
     try:
         # Verify org_key and org_secret
