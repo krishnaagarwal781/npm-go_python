@@ -1,12 +1,13 @@
 from pydantic import BaseModel
 from pymongo import MongoClient
 from fastapi import FastAPI, Request, HTTPException, File, UploadFile, Form
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import secrets
 import datetime
 import yaml
 from bson import ObjectId
+from typing import List, Optional
 
 
 class DeveloperDetails(BaseModel):
@@ -17,14 +18,58 @@ class DeveloperDetails(BaseModel):
     organisation_name: str
 
 
-class OrganisationDetails(BaseModel):
-    organisation_name: str
-    developer_email: str
+class ApplicationDetails(BaseModel):
+    app_type: str
 
 
 class CollectionPointRequest(BaseModel):
-    secret: str
-    token: str
+    org_id: str
+    org_key: str
+    org_secret: str
+    application_id: str
+
+
+class Purpose(BaseModel):
+    purpose_id: str
+    purpose_description: str
+    purpose_language: str
+
+
+class DataElement(BaseModel):
+    data_element: str
+    data_element_title: str
+    data_element_description: str
+    data_owner: str
+    legal_basis: str
+    retention_period: str
+    cross_border: bool
+    sensitive: bool
+    encrypted: bool
+    data_principal: bool
+    expiry: str
+    data_element_collection_status: str
+    purposes: List[Purpose]
+
+
+class CollectionPointDetails(BaseModel):
+    collection_point_id: str
+    cp_name: str
+    cp_status: str
+    cp_url: str
+    data_elements: List[DataElement]
+
+
+class ApplicationDetailsExtended(BaseModel):
+    application_id: str
+    type: str
+    collection_points: List[CollectionPointDetails]
+
+
+class ApplicationDetailsRequest(BaseModel):
+    org_id: str
+    org_key: str
+    org_secret: str
+    application_details: ApplicationDetailsExtended
 
 
 client = MongoClient(
@@ -33,8 +78,8 @@ client = MongoClient(
 db = client["python-go"]
 developer_details_collection = db["developer_details"]
 organisation_collection = db["organisation_details"]
+application_collection = db["org_applications"]
 collection_point_collection = db["collection_points"]
-
 
 app = FastAPI()
 app.add_middleware(
@@ -49,19 +94,18 @@ app.add_middleware(
 @app.post("/package-register")
 async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
-
     client_ip = request.client.host
 
-    # Generate a secret and token
-    secret = secrets.token_hex(16)
-    token = secrets.token_urlsafe(32)
+    # Generate org_key and org_secret
+    org_key = secrets.token_urlsafe(16)
+    org_secret = secrets.token_urlsafe(32)
 
     # Prepare the data to insert into MongoDB
     developer_data = data.dict()
     developer_data["headers"] = headers
     developer_data["client_ip"] = client_ip
-    developer_data["secret"] = secret
-    developer_data["token"] = token
+    developer_data["org_key"] = org_key
+    developer_data["org_secret"] = org_secret
     developer_data["registered_at"] = datetime.datetime.utcnow()
 
     # Insert data into developer_details collection
@@ -71,368 +115,304 @@ async def package_register(request: Request, data: DeveloperDetails):
             status_code=500, detail="Failed to insert developer details"
         )
 
-    # Insert data into organisation collection
+    # Get the generated ObjectId and convert it to string
+    inserted_dev_id = str(dev_result.inserted_id)
+
+    # Update developer_details collection with string format organisation_id
+
+    # Insert data into organisation collection using the inserted ObjectId
     organisation_data = {
         "organisation_name": data.organisation_name,
         "developer_email": data.developer_email,
-        "developer_details_id": str(dev_result.inserted_id),
+        "developer_details_id": inserted_dev_id,
         "registered_at": datetime.datetime.utcnow(),
     }
     org_result = organisation_collection.insert_one(organisation_data)
+    inserted_org_id = str(org_result.inserted_id)
+
+    developer_details_collection.update_one(
+        {"_id": ObjectId(inserted_dev_id)},
+        {"$set": {"organisation_id": inserted_org_id}},
+    )
+
     if not org_result.acknowledged:
         raise HTTPException(
             status_code=500, detail="Failed to insert organisation details"
         )
 
-    return JSONResponse(content={"secret": secret, "token": token})
+    # Save secrets in .env file and consent.md file
+    with open(".env", "w") as f:
+        f.write(
+            f"ORG_ID={inserted_org_id}\nORG_KEY={org_key}\nORG_SECRET={org_secret}\n"
+        )
+    with open("consent.md", "w") as f:
+        f.write("## Consent Manager Documentation\n")
+        f.write(f"### Organisation ID: {inserted_dev_id}\n")
+        f.write(f"### Organisation Key: {org_key}\n")
+        f.write(f"### Organisation Secret: {org_secret}\n")
+
+    return JSONResponse(
+        content={
+            "org_id": inserted_dev_id,
+            "org_key": org_key,
+            "org_secret": org_secret,
+        }
+    )
+
+
+@app.post("/create-application")
+async def create_application(
+    data: ApplicationDetails,
+    org_id: str,
+    org_key: str,
+    org_secret: str,
+):
+    # Verify org_key and org_secret
+    organisation = developer_details_collection.find_one(
+        {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
+    )
+    if not organisation:
+        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
+
+    # Generate app_id
+    app_id = secrets.token_hex(8)
+
+    # Prepare the data to insert into MongoDB
+    app_data = data.dict()
+    app_data["org_id"] = org_id
+    app_data["app_id"] = app_id
+    app_data["registered_at"] = datetime.datetime.utcnow()
+
+    # Insert data into application_collection
+    app_result = application_collection.insert_one(app_data)
+    if not app_result.acknowledged:
+        raise HTTPException(
+            status_code=500, detail="Failed to insert application details"
+        )
+
+    # Update YAML template
+    yaml_template = {
+        "version": "1.0",
+        "applications": [
+            {"application_id": app_id, "type": data.app_type, "collection_points": []}
+        ],
+    }
+
+    with open(f"{org_id}_applications.yaml", "w") as yaml_file:
+        yaml.dump(yaml_template, yaml_file)
+
+    return JSONResponse(content={"app_id": app_id, "app_type": data.app_type})
 
 
 @app.post("/create-collection-point")
 async def create_collection_point(data: CollectionPointRequest):
-    # Verify the secret and token
-    secret = data.secret
-    token = data.token
-    if not secret or not token:
-        raise HTTPException(status_code=400, detail="Secret and token are required")
-
-    developer = developer_details_collection.find_one(
-        {"secret": secret, "token": token}
+    # Verify org_key and org_secret
+    organisation = developer_details_collection.find_one(
+        {
+            "organisation_id": data.org_id,
+            "org_key": data.org_key,
+            "org_secret": data.org_secret,
+        }
     )
-    if not developer:
-        raise HTTPException(status_code=401, detail="Invalid secret or token")
+    if not organisation:
+        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    yaml_template = {
-        "version": "1.0",
-        "company": {
-            "name": "Your Company Name",
-            "website": "https://www.yourcompanywebsite.com",
-            "company_id": "12345",
-        },
-        "applications": [
+    # Generate default values for the collection point
+    collection_point_data = {
+        "org_id": data.org_id,
+        "app_id": data.application_id,
+        "cp_name": "Default Collection Point",
+        "cp_status": "active",
+        "cp_url": "http://default-url.com",
+        "data_elements": [
             {
-                "application": {
-                    "application_id": "app1",
-                    "type": "Mobile",
-                    "collection_points": [
-                        {
-                            "collection_point": {
-                                "collection_point_id": "cp1",
-                                "cp_name": "Collection Point 1",
-                                "cp_url": "https://www.collectionpoint1.com",
-                                "cp_status": "active",
-                                "data_elements": [
-                                    {
-                                        "data_element": "home_address",
-                                        "data_element_title": "Home Address",
-                                        "data_element_description": "One line description of home address field",
-                                        "data_element_collection_status": "active",
-                                        "expiry": "90 days",
-                                        "cross_border": False,
-                                        "data_principal": False,
-                                        "sensitive": True,
-                                        "encrypted": True,
-                                        "retention_period": "5 years",
-                                        "data_owner": "Customer Service Department",
-                                        "legal_basis": "Consent",
-                                        "purposes": [
-                                            {
-                                                "purpose_id": "p1",
-                                                "purpose_description": "Purpose description for home address",
-                                                "purpose_language": "EN",
-                                            },
-                                            {
-                                                "purpose_id": "p2",
-                                                "purpose_description": "Another purpose for home address",
-                                                "purpose_language": "EN",
-                                            },
-                                        ],
-                                    },
-                                    {
-                                        "data_element": "phone_number",
-                                        "data_element_title": "Phone Number",
-                                        "data_element_description": "One line description of phone number field",
-                                        "data_element_collection_status": "active",
-                                        "expiry": "60 days",
-                                        "cross_border": True,
-                                        "data_principal": True,
-                                        "sensitive": False,
-                                        "encrypted": True,
-                                        "retention_period": "3 years",
-                                        "data_owner": "Marketing Department",
-                                        "legal_basis": "Legitimate Interest",
-                                        "purposes": [
-                                            {
-                                                "purpose_id": "p3",
-                                                "purpose_description": "Purpose description for phone number",
-                                                "purpose_language": "EN",
-                                            },
-                                            {
-                                                "purpose_id": "p4",
-                                                "purpose_description": "Another purpose for phone number",
-                                                "purpose_language": "EN",
-                                            },
-                                        ],
-                                    },
-                                ],
-                            },
-                        },
-                        {
-                            "collection_point": {
-                                "collection_point_id": "cp2",
-                                "cp_name": "Collection Point 2",
-                                "cp_url": "https://www.collectionpoint2.com",
-                                "cp_status": "active",
-                                "data_elements": [
-                                    {
-                                        "data_element": "email_address",
-                                        "data_element_title": "Email Address",
-                                        "data_element_description": "One line description of email address field",
-                                        "data_element_collection_status": "active",
-                                        "expiry": "30 days",
-                                        "cross_border": True,
-                                        "data_principal": True,
-                                        "sensitive": False,
-                                        "encrypted": True,
-                                        "retention_period": "2 years",
-                                        "data_owner": "Sales Department",
-                                        "legal_basis": "Contractual Necessity",
-                                        "purposes": [
-                                            {
-                                                "purpose_id": "p5",
-                                                "purpose_description": "Purpose description for email address",
-                                                "purpose_language": "EN",
-                                            },
-                                            {
-                                                "purpose_id": "p6",
-                                                "purpose_description": "Another purpose for email address",
-                                                "purpose_language": "EN",
-                                            },
-                                        ],
-                                    },
-                                    {
-                                        "data_element": "date_of_birth",
-                                        "data_element_title": "Date of Birth",
-                                        "data_element_description": "One line description of date of birth field",
-                                        "data_element_collection_status": "active",
-                                        "expiry": "365 days",
-                                        "cross_border": False,
-                                        "data_principal": True,
-                                        "sensitive": True,
-                                        "encrypted": True,
-                                        "retention_period": "10 years",
-                                        "data_owner": "HR Department",
-                                        "legal_basis": "Legal Obligation",
-                                        "purposes": [
-                                            {
-                                                "purpose_id": "p7",
-                                                "purpose_description": "Purpose description for date of birth",
-                                                "purpose_language": "EN",
-                                            },
-                                            {
-                                                "purpose_id": "p8",
-                                                "purpose_description": "Another purpose for date of birth",
-                                                "purpose_language": "EN",
-                                            },
-                                        ],
-                                    },
-                                ],
-                            },
-                        },
-                    ],
-                },
-            },
+                "data_element": "default_element",
+                "data_element_title": "Default Element Title",
+                "data_element_description": "Default Element Description",
+                "data_owner": "Default Owner",
+                "legal_basis": "Default Legal Basis",
+                "retention_period": "1 year",
+                "cross_border": False,
+                "sensitive": False,
+                "encrypted": True,
+                "data_principal": True,
+                "expiry": "Never",
+                "data_element_collection_status": "active",
+                "purposes": [
+                    {
+                        "purpose_id": "default_purpose_id",
+                        "purpose_description": "Default Purpose Description",
+                        "purpose_language": "EN",
+                    }
+                ],
+            }
         ],
+        "registered_at": datetime.datetime.utcnow(),
     }
 
-    yaml_response = yaml.dump(yaml_template, default_flow_style=False)
-
-    return PlainTextResponse(yaml_response, media_type="text/yaml")
-
-
-@app.post("/post-collection-point")
-async def post_collection_point(
-    yaml_file: UploadFile = File(...), secret: str = Form(...), token: str = Form(...)
-):
-    try:
-        # Verify secret and token
-        if not secret or not token:
-            raise HTTPException(status_code=400, detail="Secret and token are required")
-
-        developer = developer_details_collection.find_one(
-            {"secret": secret, "token": token}
+    # Insert data into collection_point_collection
+    cp_result = collection_point_collection.insert_one(collection_point_data)
+    if not cp_result.acknowledged:
+        raise HTTPException(
+            status_code=500, detail="Failed to insert collection point details"
         )
-        if not developer:
-            raise HTTPException(status_code=401, detail="Invalid secret or token")
 
-        # Read and parse YAML data from the uploaded file
-        yaml_content = await yaml_file.read()
-        yaml_data = yaml.safe_load(yaml_content)
+    # Get the inserted _id from MongoDB and convert it to string for cp_id
+    cp_id = str(cp_result.inserted_id)
+    # Update YAML template with cp_id
+    with open(f"{data.org_id}_applications.yaml", "r") as yaml_file:
+        yaml_data = yaml.safe_load(yaml_file)
 
-        # Extract company details
-        company_id = yaml_data["company"]["company_id"]
-        company_name = yaml_data["company"]["name"]
-        company_website = yaml_data["company"]["website"]
+    del collection_point_data["_id"]
 
-        # Extract applications and collection points
-        applications = yaml_data.get("applications", [])
-
-        inserted_ids = []
-        for application in applications:
-            application_id = application["application"]["application_id"]
-            collection_points = application["application"]["collection_points"]
-
-            for cp in collection_points:
-                collection_point_data = cp["collection_point"]
-                cp_id = collection_point_data["collection_point_id"]
-
-                # Check if the collection point already exists for the developer
-                existing_cp = collection_point_collection.find_one(
-                    {
-                        "developer_details_id": str(developer["_id"]),
-                        "collection_point_id": cp_id,
-                    }
-                )
-
-                if existing_cp:
-                    # Skip insertion if collection point already exists
-                    continue
-
-                # Example of extracting data elements
-                data_elements = collection_point_data["data_elements"]
-
-                # Example of inserting into MongoDB
-                cp_data_to_insert = {
-                    "developer_details_id": str(developer["_id"]),
-                    "company_id": company_id,
-                    "company_name": company_name,
-                    "company_website": company_website,
-                    "application_id": application_id,
+    for application in yaml_data["applications"]:
+        if application["application_id"] == data.application_id:
+            application["collection_points"].append(
+                {
                     "collection_point_id": cp_id,
-                    "collection_point_name": collection_point_data["cp_name"],
-                    "registered_at": datetime.datetime.utcnow(),
-                    "data_elements": data_elements,
+                    "cp_details": collection_point_data,
                 }
+            )
 
-                result = collection_point_collection.insert_one(cp_data_to_insert)
-                if result.acknowledged:
-                    inserted_ids.append(str(result.inserted_id))
+    with open(f"{data.org_id}_applications.yaml", "w") as yaml_file:
+        yaml.dump(yaml_data, yaml_file)
 
-        return JSONResponse(
-            content={
-                "message": f"{len(inserted_ids)} collection points inserted",
-                "ids": inserted_ids,
-            }
-        )
-
-    except Exception as e:
-        return JSONResponse(
-            content={"message": f"Failed to process request. Error: {str(e)}"},
-            status_code=500,
-        )
+    return JSONResponse(content={"message": "Collection point created successfully"})
 
 
-@app.post("/update-collection-point")
-async def update_collection_point(
-    yaml_file: UploadFile = File(...), secret: str = Form(...), token: str = Form(...)
+@app.post("/push-yaml")
+async def push_yaml(
+    yaml_file: UploadFile = File(...),
+    org_id: str = Form(...),
+    app_id: str = Form(...),
+    org_key: str = Form(...),
+    org_secret: str = Form(...),
 ):
-    try:
-        # Verify secret and token
-        if not secret or not token:
-            raise HTTPException(status_code=400, detail="Secret and token are required")
 
-        developer = developer_details_collection.find_one(
-            {"secret": secret, "token": token}
-        )
-        if not developer:
-            raise HTTPException(status_code=401, detail="Invalid secret or token")
+    # Verify org_key and org_secret
+    organisation = developer_details_collection.find_one(
+        {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
+    )
+    if not organisation:
+        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-        # Read and parse YAML data from the uploaded file
-        yaml_content = await yaml_file.read()
-        yaml_data = yaml.safe_load(yaml_content)
+    # Read and parse YAML data from the uploaded file
+    yaml_content = await yaml_file.read()
+    yaml_data = yaml.safe_load(yaml_content)
 
-        # Extract company details
-        company_id = yaml_data["company"]["company_id"]
-        company_name = yaml_data["company"]["name"]
-        company_website = yaml_data["company"]["website"]
+    # Extract applications and collection points
+    applications = yaml_data.get("applications", [])
+    operation_update = []
 
-        # Extract applications and collection points
-        applications = yaml_data.get("applications", [])
-
-        updated_ids = []
-        for application in applications:
-            application_id = application["application"]["application_id"]
-            collection_points = application["application"]["collection_points"]
+    for application in applications:
+        if application["application_id"] == app_id:
+            collection_points = application["collection_points"]
 
             for cp in collection_points:
-                collection_point_data = cp["collection_point"]
-                cp_id = collection_point_data["collection_point_id"]
+                cp_id = cp["collection_point_id"]
 
-                # Check if the collection point exists for the developer
+                # Check if the collection point already exists
                 existing_cp = collection_point_collection.find_one(
-                    {
-                        "developer_details_id": str(developer["_id"]),
-                        "collection_point_id": cp_id,
-                    }
+                    {"org_id": org_id, "app_id": app_id, "cp_id": cp_id}
                 )
 
                 if existing_cp:
-                    # Update the existing collection point
-                    update_data = {
-                        "company_id": company_id,
-                        "company_name": company_name,
-                        "company_website": company_website,
-                        "application_id": application_id,
-                        "collection_point_name": collection_point_data["cp_name"],
-                        "registered_at": datetime.datetime.utcnow(),
-                        "data_elements": collection_point_data["data_elements"],
-                    }
-
+                    # Update existing collection point
+                    del cp["cp_details"]["_id"]
                     result = collection_point_collection.update_one(
-                        {"_id": existing_cp["_id"]}, {"$set": update_data}
+                        {"_id": existing_cp["_id"]}, {"$set": cp["cp_details"]}
                     )
-
                     if result.modified_count > 0:
-                        updated_ids.append(str(existing_cp["_id"]))
+                        operation_update.append(
+                            {"cp_id": cp_id, "operation": "updated"}
+                        )
+                else:
+                    # Insert new collection point
+                    cp_data = cp["cp_details"]
+                    cp_data["org_id"] = org_id
+                    cp_data["app_id"] = app_id
+                    cp_data["cp_id"] = cp_id
+                    cp_data["registered_at"] = datetime.datetime.utcnow()
 
-        return JSONResponse(
-            content={
-                "message": f"{len(updated_ids)} collection points updated",
-                "ids": updated_ids,
-            }
-        )
+                    result = collection_point_collection.insert_one(cp_data)
+                    if result.acknowledged:
+                        operation_update.append(
+                            {"cp_id": cp_id, "operation": "created"}
+                        )
+    del cp_data["_id"]
+    # Update YAML template
+    with open(f"{org_id}_applications.yaml", "w") as yaml_file:
+        yaml.dump(yaml_data, yaml_file)
 
-    except Exception as e:
-        return JSONResponse(
-            content={"message": f"Failed to process request. Error: {str(e)}"},
-            status_code=500,
-        )
+    return JSONResponse(content={"operation_update": operation_update})
+
+
+@app.delete("/delete-collection-point/{collection_point_id}")
+async def delete_collection_point(
+    collection_point_id: str, org_id: str, org_key: str, org_secret: str
+):
+    # Verify org_key and org_secret
+    organisation = developer_details_collection.find_one(
+        {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
+    )
+    if not organisation:
+        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
+
+    # Delete collection point from MongoDB
+    delete_result = collection_point_collection.delete_one(
+        {"_id": ObjectId(collection_point_id), "org_id": org_id}
+    )
+    if delete_result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Collection point not found")
+
+    # Update YAML file to remove the collection point
+    with open(f"{org_id}_applications.yaml", "r") as yaml_file:
+        yaml_data = yaml.safe_load(yaml_file)
+
+    for application in yaml_data["applications"]:
+        application["collection_points"] = [
+            cp
+            for cp in application["collection_points"]
+            if cp["collection_point_id"] != collection_point_id
+        ]
+
+    with open(f"{org_id}_applications.yaml", "w") as yaml_file:
+        yaml.dump(yaml_data, yaml_file)
+
+    return JSONResponse(content={"message": "Collection point deleted successfully"})
 
 
 @app.get("/get-collection-points")
-async def get_collection_points(secret: str, token: str):
-    try:
-        # Verify the secret and token against your developer details collection
-        developer = developer_details_collection.find_one(
-            {"secret": secret, "token": token}
-        )
-        if not developer:
-            raise HTTPException(status_code=401, detail="Invalid secret or token")
+async def get_collection_points(
+    org_id: str, 
+    org_key: str, 
+    org_secret: str, 
+    application_id: str
+):
+    # Verify org_key and org_secret
+    organisation = developer_details_collection.find_one(
+        {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
+    )
+    if not organisation:
+        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-        # Fetch collection points for the authenticated user
-        collection_points = []
-        cursor = collection_point_collection.find(
-            {"developer_details_id": str(developer["_id"])}
-        )
+    # Retrieve all collection points for the specified org_id and application_id
+    collection_points = list(collection_point_collection.find(
+        {"org_id": org_id, "app_id": application_id}
+    ))
 
-        for document in cursor:
-            # Convert ObjectId to string for serialization
-            document["_id"] = str(document["_id"])
-            collection_points.append(document)
+    if not collection_points:
+        raise HTTPException(status_code=404, detail="No collection points found")
 
-        return collection_points
+    # Convert MongoDB ObjectId and datetime to string for JSON serialization
+    for cp in collection_points:
+        cp["_id"] = str(cp["_id"])
+        if "registered_at" in cp:
+            cp["registered_at"] = cp["registered_at"].isoformat()
+        for data_element in cp.get("data_elements", []):
+            for purpose in data_element.get("purposes", []):
+                if "purpose_date" in purpose:
+                    purpose["purpose_date"] = purpose["purpose_date"].isoformat()
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch collection points. Error: {str(e)}",
-        )
+    return JSONResponse(content={"collection_points": collection_points})
+
