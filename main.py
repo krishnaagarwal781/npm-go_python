@@ -173,7 +173,7 @@ async def create_application(
     return JSONResponse(
         content={
             "yaml_data": yaml_data,
-            "app_id": app_id,
+            "con_app_id": app_id,
             "app_type": data.app_type,
         }
     )
@@ -353,4 +353,4 @@ async def get_collection_points(
                     if "purpose_date" in purpose:
                         purpose["purpose_date"] = purpose["purpose_date"].isoformat()
 
-    return JSONResponse(content={"collection_points": collection_points})
+    return JSONResponse(content={"con_collection_points": collection_points})
