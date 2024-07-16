@@ -147,13 +147,13 @@ async def package_register(request: Request, data: DeveloperDetails):
         )
     with open("consent.md", "w") as f:
         f.write("## Consent Manager Documentation\n")
-        f.write(f"### Organisation ID: {inserted_dev_id}\n")
+        f.write(f"### Organisation ID: {inserted_org_id}\n")
         f.write(f"### Organisation Key: {org_key}\n")
         f.write(f"### Organisation Secret: {org_secret}\n")
 
     return JSONResponse(
         content={
-            "org_id": inserted_dev_id,
+            "org_id": inserted_org_id,
             "org_key": org_key,
             "org_secret": org_secret,
         }
@@ -247,7 +247,6 @@ async def create_collection_point(data: CollectionPointRequest):
                 ],
             }
         ],
-        "registered_at": datetime.datetime.utcnow(),
     }
 
     # Insert data into collection_point_collection
@@ -288,7 +287,6 @@ async def push_yaml(
     org_key: str = Form(...),
     org_secret: str = Form(...),
 ):
-
     # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
@@ -296,55 +294,43 @@ async def push_yaml(
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Read and parse YAML data from the uploaded file
-    yaml_content = await yaml_file.read()
-    yaml_data = yaml.safe_load(yaml_content)
+    # Load YAML data
+    try:
+        yaml_data = yaml.safe_load(yaml_file.file)
+    except yaml.YAMLError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML file: {exc}")
 
-    # Extract applications and collection points
-    applications = yaml_data.get("applications", [])
-    operation_update = []
-
-    for application in applications:
+    # Process each collection point in YAML data
+    for application in yaml_data.get("applications", []):
         if application["application_id"] == app_id:
-            collection_points = application["collection_points"]
-
-            for cp in collection_points:
-                cp_id = cp["collection_point_id"]
-
-                # Check if the collection point already exists
+            for cp_details in application.get("collection_points", []):
+                cp_id = cp_details.get("collection_point_id")
                 existing_cp = collection_point_collection.find_one(
-                    {"org_id": org_id, "app_id": app_id, "cp_id": cp_id}
+                    {"_id": ObjectId(cp_id)}
                 )
-
                 if existing_cp:
                     # Update existing collection point
-                    del cp["cp_details"]["_id"]
-                    result = collection_point_collection.update_one(
-                        {"_id": existing_cp["_id"]}, {"$set": cp["cp_details"]}
+                    collection_point_collection.update_one(
+                        {"_id": existing_cp["_id"]}, {"$set": cp_details["cp_details"]}
                     )
-                    if result.modified_count > 0:
-                        operation_update.append(
-                            {"cp_id": cp_id, "operation": "updated"}
-                        )
                 else:
                     # Insert new collection point
-                    cp_data = cp["cp_details"]
-                    cp_data["org_id"] = org_id
-                    cp_data["app_id"] = app_id
-                    cp_data["cp_id"] = cp_id
-                    cp_data["registered_at"] = datetime.datetime.utcnow()
+                    cp_data = {
+                        "org_id": org_id,
+                        "app_id": app_id,
+                        "cp_name": cp_details["cp_details"]["cp_name"],
+                        "cp_status": cp_details["cp_details"]["cp_status"],
+                        "cp_url": cp_details["cp_details"]["cp_url"],
+                        "data_elements": cp_details["cp_details"]["data_elements"],
+                    }
+                    cp_result = collection_point_collection.insert_one(cp_data)
+                    cp_details["collection_point_id"] = str(cp_result.inserted_id)
 
-                    result = collection_point_collection.insert_one(cp_data)
-                    if result.acknowledged:
-                        operation_update.append(
-                            {"cp_id": cp_id, "operation": "created"}
-                        )
-    del cp_data["_id"]
-    # Update YAML template
+    # Write updated YAML back to file
     with open(f"{org_id}_applications.yaml", "w") as yaml_file:
         yaml.dump(yaml_data, yaml_file)
 
-    return JSONResponse(content={"operation_update": operation_update})
+    return JSONResponse(content={"message": "YAML file updated successfully"})
 
 
 @app.delete("/delete-collection-point/{collection_point_id}")
@@ -384,10 +370,7 @@ async def delete_collection_point(
 
 @app.get("/get-collection-points")
 async def get_collection_points(
-    org_id: str, 
-    org_key: str, 
-    org_secret: str, 
-    application_id: str
+    org_id: str, org_key: str, org_secret: str, application_id: str
 ):
     # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
@@ -397,9 +380,9 @@ async def get_collection_points(
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
     # Retrieve all collection points for the specified org_id and application_id
-    collection_points = list(collection_point_collection.find(
-        {"org_id": org_id, "app_id": application_id}
-    ))
+    collection_points = list(
+        collection_point_collection.find({"org_id": org_id, "app_id": application_id})
+    )
 
     if not collection_points:
         raise HTTPException(status_code=404, detail="No collection points found")
@@ -415,4 +398,3 @@ async def get_collection_points(
                     purpose["purpose_date"] = purpose["purpose_date"].isoformat()
 
     return JSONResponse(content={"collection_points": collection_points})
-
