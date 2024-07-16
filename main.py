@@ -155,7 +155,7 @@ async def package_register(request: Request, data: DeveloperDetails):
         content={
             "con_org_id": inserted_org_id,
             "con_org_key": org_key,
-            "org_secret": org_secret,
+            "con_org_secret": org_secret,
         }
     )
 
