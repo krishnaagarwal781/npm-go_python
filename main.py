@@ -153,8 +153,8 @@ async def package_register(request: Request, data: DeveloperDetails):
 
     return JSONResponse(
         content={
-            "org_id": inserted_org_id,
-            "org_key": org_key,
+            "con_org_id": inserted_org_id,
+            "con_org_key": org_key,
             "org_secret": org_secret,
         }
     )
