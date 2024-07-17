@@ -1,0 +1,9 @@
+version: "1.0"
+organisation_id: "6697949da341726586e9d438"
+applications:
+  - application_id: "b8e51b9808d1d2d5"
+    type: "web app"
+    name: "Flipkart"
+    stage: "development"
+    application_user: "global"
+    collection_points: []

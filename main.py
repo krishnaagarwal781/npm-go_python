@@ -7,6 +7,7 @@ import secrets
 import datetime
 from bson import ObjectId
 from typing import List
+import yaml
 
 
 class DeveloperDetails(BaseModel):
@@ -19,6 +20,9 @@ class DeveloperDetails(BaseModel):
 
 class ApplicationDetails(BaseModel):
     app_type: str
+    app_name: str
+    app_stage: str
+    application_user: str
 
 
 class CollectionPointRequest(BaseModel):
@@ -151,6 +155,27 @@ async def create_application(
 
     app_id = secrets.token_hex(8)
 
+    valid_types = ["web app", "mobile app", "ctv", "pos", "other"]
+    if data.app_type not in valid_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid app_type. Must be one of: {', '.join(valid_types)}",
+        )
+
+    valid_stages = ["development", "production", "testing"]
+    if data.app_stage not in valid_stages:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid app_stage. Must be one of: {', '.join(valid_stages)}",
+        )
+
+    valid_users = ["global", "india", "eu", "usa", "saudi arabia"]
+    if data.application_user not in valid_users:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid application_user. Must be one of: {', '.join(valid_users)}",
+        )
+
     app_data = data.dict()
     app_data["org_id"] = org_id
     app_data["app_id"] = app_id
@@ -165,8 +190,16 @@ async def create_application(
     # Prepare the YAML-like JSON structure to return
     yaml_data = {
         "version": "1.0",
+        "organisation_id": org_id,
         "applications": [
-            {"application_id": app_id, "type": data.app_type, "collection_points": []}
+            {
+                "application_id": app_id,
+                "type": data.app_type,
+                "name": data.app_name,
+                "stage": data.app_stage,
+                "application_user": data.application_user,
+                "collection_points_data": [],
+            }
         ],
     }
 
@@ -175,6 +208,9 @@ async def create_application(
             "yaml_data": yaml_data,
             "con_app_id": app_id,
             "app_type": data.app_type,
+            "app_name": data.app_name,
+            "app_stage": data.app_stage,
+            "application_user": data.application_user,
         }
     )
 
@@ -191,54 +227,57 @@ async def create_collection_point(data: CollectionPointRequest):
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
+    # Prepare collection point data from the request
     collection_point_data = {
-        "org_id": data.org_id,
-        "app_id": data.application_id,
-        "cp_name": "Default Collection Point",
+        "cp_name": "<Blank>",
         "cp_status": "active",
-        "cp_url": "http://default-url.com",
+        "cp_url": "<URL>",
         "data_elements": [
             {
-                "data_element": "default_element",
-                "data_element_title": "Default Element Title",
-                "data_element_description": "Default Element Description",
-                "data_owner": "Default Owner",
-                "legal_basis": "Default Legal Basis",
-                "retention_period": "1 year",
+                "data_element": "<Blank>",
+                "data_element_collection_status": "active",
+                "data_element_title": "<Blank>",
+                "data_element_description": "<Blank>",
+                "data_owner": "<Blank>",
+                "legal_basis": "<Blank>",
+                "retention_period": "<Number> <days, month, year>",
                 "cross_border": False,
                 "sensitive": False,
-                "encrypted": True,
-                "data_principal": True,
-                "expiry": "Never",
-                "data_element_collection_status": "active",
+                "encrypted": False,
+                "expiry": "<Number> <days, month, year>",
                 "purposes": [
                     {
-                        "purpose_id": "default_purpose_id",
-                        "purpose_description": "Default Purpose Description",
-                        "purpose_language": "EN",
+                        "purpose_description": "<Blank>",
+                        "purpose_language": "<EN, EU, HIN>",
                     }
                 ],
             }
         ],
     }
 
+    # Insert the collection point data into MongoDB
     cp_result = collection_point_collection.insert_one(collection_point_data)
     if not cp_result.acknowledged:
         raise HTTPException(
             status_code=500, detail="Failed to insert collection point details"
         )
 
+    # Retrieve the inserted cp_id
     cp_id = str(cp_result.inserted_id)
 
-    # Convert ObjectId to string for JSON serialization
-    collection_point_data["_id"] = str(cp_result.inserted_id)
+    # Remove the _id field before returning collection_point_data
+    collection_point_data.pop("_id", None)
 
-    return JSONResponse(
-        content={
-            "message": f"Collection point with id {cp_id} created successfully",
-            "collection_point_data": collection_point_data,
-        }
-    )
+    # Include cp_id at the beginning of the collection point data response
+    response_data = {
+        "cp_id": cp_id,
+        **collection_point_data,
+    }
+
+    return {
+        "message": f"Collection point with id {cp_id} created successfully",
+        "collection_point_data": response_data,
+    }
 
 
 @app.post("/push-yaml")
@@ -265,29 +304,37 @@ async def push_yaml(
     # Process each collection point in YAML data
     for application in yaml_data.get("applications", []):
         if application.get("application_id") == app_id:
-            for cp_details in application.get("collection_points", []):
-                cp_id = cp_details.get("collection_point_id")
+            for cp_details in application.get("collection_points_data", []):
+                cp_id = cp_details.get("cp_id")
                 if cp_id:
                     existing_cp = collection_point_collection.find_one(
                         {"_id": ObjectId(cp_id)}
                     )
                     if existing_cp:
                         # Update existing collection point
-                        collection_point_collection.update_one(
-                            {"_id": existing_cp["_id"]}, {"$set": cp_details}
+                        update_result = collection_point_collection.update_one(
+                            {"_id": ObjectId(cp_id)},
+                            {
+                                "$set": {
+                                    "cp_name": cp_details["cp_name"],
+                                    "cp_status": cp_details["cp_status"],
+                                    "cp_url": cp_details["cp_url"],
+                                    "data_elements": cp_details["data_elements"],
+                                    # Add more fields as needed
+                                }
+                            },
                         )
+                        if update_result.modified_count == 0:
+                            raise HTTPException(
+                                status_code=500,
+                                detail=f"Failed to update collection point {cp_id}",
+                            )
                     else:
-                        # Insert new collection point
-                        cp_data = {
-                            "org_id": org_id,
-                            "app_id": app_id,
-                            "cp_name": cp_details["cp_name"],
-                            "cp_status": cp_details["cp_status"],
-                            "cp_url": cp_details["cp_url"],
-                            "data_elements": cp_details["data_elements"],
-                        }
-                        cp_result = collection_point_collection.insert_one(cp_data)
-                        cp_details["collection_point_id"] = str(cp_result.inserted_id)
+                        # Handle scenario where collection_point_id is not found
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Collection point {cp_id} not found",
+                        )
                 else:
                     # Handle scenario where collection_point_id is missing in YAML
                     raise HTTPException(
@@ -315,7 +362,6 @@ async def delete_collection_point(
     delete_result = collection_point_collection.delete_one(
         {"_id": ObjectId(collection_point_id), "org_id": org_id}
     )
-    
     # Check if the collection point was not found
     if delete_result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Collection point not found")
