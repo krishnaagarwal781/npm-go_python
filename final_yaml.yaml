@@ -1,13 +1,13 @@
 version: "1.0"
-organisation_id: "6697a1f9c86de1eec5896339"
+organisation_id: "6698c46f4a899110a27d7e04"
 applications:
-  - application_id: "6feb127c56aea941"
+  - application_id: "021643bb4f44fa0a"
     type: "web app"
-    name: "Flipkart"
+    name: "flipboo"
     stage: "development"
     application_user: "global"
     collection_points_data:
-      - cp_id: "6697a3912ef2cde2afed192e"
+      - cp_id: "6698c6a1bd6d113ade6d8ac4"
         cp_name: "mastibolo"
         cp_status: "active"
         cp_url: "acitve.com"

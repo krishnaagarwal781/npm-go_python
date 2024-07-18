@@ -229,6 +229,8 @@ async def create_collection_point(data: CollectionPointRequest):
 
     # Prepare collection point data from the request
     collection_point_data = {
+        "org_id": data.org_id,
+        "application_id": data.application_id,
         "cp_name": "<Blank>",
         "cp_status": "active",
         "cp_url": "<URL>",
@@ -267,6 +269,8 @@ async def create_collection_point(data: CollectionPointRequest):
 
     # Remove the _id field before returning collection_point_data
     collection_point_data.pop("_id", None)
+    collection_point_data.pop("application_id", None)
+    collection_point_data.pop("org_id", None)
 
     # Include cp_id at the beginning of the collection point data response
     response_data = {
@@ -382,7 +386,7 @@ async def get_collection_points(
 
     # Retrieve collection points for the given org_id and app_id
     collection_points = list(
-        collection_point_collection.find({"org_id": org_id, "app_id": app_id})
+        collection_point_collection.find({"org_id": org_id, "application_id": app_id})
     )
 
     if not collection_points:

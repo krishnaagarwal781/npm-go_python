@@ -1,9 +1,9 @@
 version: "1.0"
-organisation_id: "6697949da341726586e9d438"
+organisation_id: "6698c46f4a899110a27d7e04"
 applications:
-  - application_id: "b8e51b9808d1d2d5"
+  - application_id: "021643bb4f44fa0a"
     type: "web app"
-    name: "Flipkart"
+    name: "flipboo"
     stage: "development"
     application_user: "global"
     collection_points: []
