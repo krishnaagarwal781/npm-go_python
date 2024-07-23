@@ -80,10 +80,79 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 
 
 
+func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
+	var data models.ApplicationDetails
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.PlainText(w, r, "Invalid request payload")
+		return
+	}
+
+	// Extract parameters from URL queries
+	orgID := r.URL.Query().Get("org_id")
+	orgKey := r.URL.Query().Get("org_key")
+	orgSecret := r.URL.Query().Get("org_secret")
+
+
+	// verify the organisation id, key and secret
+	filter:=bson.M{"_id": orgID, "organisation_key": orgKey, "organisation_secret": orgSecret}
+	_,err := database.FindData(context.Background(), h.client, h.cfg.Dbname,"organisation_details", filter)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			render.Status(r, http.StatusUnauthorized)
+			render.PlainText(w, r, "Invalid org_key or org_secret")
+			return
+		}
+		log.Error().Err(err).Msg("Failed to find organisation")
+		render.Status(r, http.StatusInternalServerError)
+		render.PlainText(w, r, "Failed to verify organisation")
+		return
+	}
+
+
+	// Generate application id
+	appID := utils.GenerateUUID()
+
+	// Prepare the data to insert into MongoDB
+	appData := bson.M{
+		"org_id":           orgID,
+		"app_id":           appID,
+		"app_type":         data.AppType,
+		"app_name":         data.AppName,
+		"app_stage":        data.AppStage,
+		"application_user": data.ApplicationUser,
+		"registered_at":    time.Now(),
+	}
+
+	_,err = database.InsertData(context.Background(), h.client, h.cfg.Dbname,"application_collection", appData)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to insert application details into mongodb.")
+		render.Status(r, http.StatusInternalServerError)
+		render.PlainText(w, r, "Failed to insert application details into mongodb.")
+		return
+	}
+
+	// @TODO: Do something with yaml
+
+	response := map[string]string{
+		"app_id": appID,
+		"app_type": data.AppType,
+	}
+
+	render.JSON(w, r, response)
+}
+
+
+
+
+
+
 
 func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) {
 
-// @TODO: Implement this method
+
+
 }
 
 func (h *Handler) PostCollectionPoint(w http.ResponseWriter, r *http.Request) {

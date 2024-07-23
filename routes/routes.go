@@ -16,6 +16,9 @@ func InitializeRoutes(r *chi.Mux, client *mongo.Client, cfg *models.Config) {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Post("/package-register", h.PackageRegister)
+		r.Post("/create-application", h.CreateApplication)
+
+		
 		r.Post("/create-collection-point", h.CreateCollectionPoint)
 		r.Post("/post-collection-point", h.PostCollectionPoint)
 		r.Post("/update-collection-point", h.UpdateCollectionPoint)

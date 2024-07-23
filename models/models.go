@@ -1,5 +1,12 @@
 package models
 
+// Config represents the configuration structure.
+type Config struct {
+	MongoDBURI string        
+	LogLevel   string
+	Dbname	 string        
+}
+
 // DeveloperDetails represents developer registration data.
 type DeveloperDetails struct {
 	DeveloperEmail   string `json:"developer_email"`
@@ -8,6 +15,16 @@ type DeveloperDetails struct {
 	DeveloperMobile  string `json:"developer_mobile"`
 	OrganisationName string `json:"organisation_name"`
 }
+
+// ApplicationDetails represents application registration data.
+type ApplicationDetails struct {
+	AppType         string `json:"app_type"`
+	AppName         string `json:"app_name"`
+	AppStage        string `json:"app_stage"`
+	ApplicationUser string `json:"application_user"`
+}
+
+
 
 // CollectionPointRequest represents request data for creating a collection point.
 type CollectionPointRequest struct {
@@ -49,9 +66,3 @@ type Purpose struct {
 }
 
 
-// Config represents the configuration structure.
-type Config struct {
-	MongoDBURI string        
-	LogLevel   string
-	Dbname	 string        
-}

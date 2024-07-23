@@ -49,3 +49,14 @@ func InsertData(ctx context.Context, client *mongo.Client, database_name string,
 
 	return result,nil
 }
+
+func FindData(ctx context.Context, client *mongo.Client, database_name string, collection_name string, filter interface{}) (*mongo.Cursor,error) {
+	
+	collection := client.Database(database_name).Collection(collection_name)
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil,err
+	}
+
+	return cursor,nil
+}
