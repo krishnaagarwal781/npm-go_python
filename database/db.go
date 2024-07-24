@@ -60,3 +60,28 @@ func FindData(ctx context.Context, client *mongo.Client, database_name string, c
 
 	return cursor,nil
 }
+
+// FindOne finds a single document in the specified collection
+func FindOne(ctx context.Context, client *mongo.Client, databaseName string, collectionName string, filter interface{}) *mongo.SingleResult {
+	collection := client.Database(databaseName).Collection(collectionName)
+	return collection.FindOne(ctx, filter)
+}
+
+// UpdateData updates a document in the specified collection
+func UpdateData(ctx context.Context, client *mongo.Client, databaseName string, collectionName string, filter interface{}, update interface{}) (*mongo.UpdateResult, error) {
+	collection := client.Database(databaseName).Collection(collectionName)
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func DeleteOne(ctx context.Context, client *mongo.Client, databaseName string, collectionName string, filter interface{}) (*mongo.DeleteResult, error) {
+	collection := client.Database(databaseName).Collection(collectionName)
+	result, err := collection.DeleteOne(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}

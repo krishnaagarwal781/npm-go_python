@@ -14,14 +14,26 @@ func InitializeRoutes(r *chi.Mux, client *mongo.Client, cfg *models.Config) {
 	h := handlers.NewHandler(client, cfg)
 	
 
-	r.Route("/api", func(r chi.Router) {
+	r.Route("/",func(r chi.Router) {
 		r.Post("/package-register", h.PackageRegister)
 		r.Post("/create-application", h.CreateApplication)
-
-		
+	
 		r.Post("/create-collection-point", h.CreateCollectionPoint)
-		r.Post("/post-collection-point", h.PostCollectionPoint)
-		r.Post("/update-collection-point", h.UpdateCollectionPoint)
+		r.Post("/push-yaml", h.PushYaml)
+		r.Delete("/delete-collection-point", h.DeleteCollectionPoint)
 		r.Get("/get-collection-points", h.GetCollectionPoints)
 	})
+	
+
+	// r.Route("/api", func(r chi.Router) {
+	// 	r.Post("/package-register", h.PackageRegister)
+	// 	r.Post("/create-application", h.CreateApplication)
+
+		
+	// 	r.Post("/create-collection-point", h.CreateCollectionPoint)
+	// 	r.Post("/push-yaml", h.PushYaml)
+	// 	r.Delete("//delete-collection-point", h.DeleteCollectionPoint)
+	// 	r.Get("/get-collection-points", h.GetCollectionPoints)
+	// })
+
 }

@@ -1,0 +1,29 @@
+version: "1.0"
+applications:
+- application_id: 4e860f8b
+  type: web
+  collection_points:
+  - id: 66a13d9806e7914f914bf960
+    org_id: 66a1350f7439e474462f6c0b
+    application_id: 4e860f8b
+    cp_name: Default Collection Point
+    cp_status: active
+    cp_url: http://default-url.com
+    data_elements:
+    - data_element: default_element
+      data_element_title: Default Element Title
+      data_element_description: Default Element Description
+      data_owner: Default Owner
+      legal_basis: Default Legal Basis
+      retention_period: 1 year
+      cross_border: false
+      sensitive: false
+      encrypted: true
+      expiry: Never
+      data_element_collection_status: active
+      purposes:
+      - purpose_id: default_purpose_id
+        purpose_description: Default Purpose Description
+        purpose_language: EN
+      registered_at: 0001-01-01T00:00:00Z
+  
