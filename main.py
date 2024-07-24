@@ -94,6 +94,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome bhidu"}
+
+
 @app.post("/package-register")
 async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
