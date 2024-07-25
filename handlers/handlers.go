@@ -518,22 +518,34 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		"org_secret":      orgSecret,
 	}
 
-	var organisation models.OrganisationDetails
-	err := database.FindOne(context.Background(), h.client, h.cfg.Dbname, "developer_details", filter).Decode(&organisation)
+	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
+
+	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	if count == 0 {
+		log.Debug().Msg("Invalid org_key or org_secret")
+		render.Status(r, http.StatusUnauthorized)
+		render.PlainText(w, r, "Invalid org_key or org_secret")
+		return
+	}
+
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			render.Status(r, http.StatusUnauthorized)
-			render.PlainText(w, r, "Invalid org_key or org_secret")
-			return
-		}
 		log.Error().Err(err).Msg("Failed to find organisation")
 		render.Status(r, http.StatusInternalServerError)
 		render.PlainText(w, r, "Failed to verify organisation")
 		return
 	}
 
+	// convert collectionPointID to primitive.ObjectID
+	collectionPointIDHex, err := primitive.ObjectIDFromHex(collectionPointID)
+	if err != nil {
+		log.Error().Err(err).Msg("Invalid collection point ID")
+		render.Status(r, http.StatusBadRequest)
+		render.PlainText(w, r, "Invalid collection point ID")
+		return
+	}
+
 	// Delete collection point from MongoDB
-	filter = bson.M{"_id": collectionPointID, "org_id": orgID}
+	filter = bson.M{"_id": collectionPointIDHex, "org_id": orgID}
 	deleteResult, err := database.DeleteOne(context.Background(), h.client, h.cfg.Dbname, "collection_points", filter)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete collection point")
@@ -547,7 +559,7 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Update YAML file to remove the collection point
+	// Read the YAML file
 	yamlFilename := fmt.Sprintf("%s_applications.yaml", orgID)
 	yamlFile, err := os.ReadFile(yamlFilename)
 	if err != nil {
@@ -568,15 +580,15 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 
 	// Remove the collection point from the YAML data
 	for i := range yamlData.Applications {
-		if yamlData.Applications[i].ApplicationID == collectionPointID {
-			var updatedCollectionPoints []models.CollectionPointData
-			for _, cp := range yamlData.Applications[i].CollectionPoints {
-				if cp.Id != collectionPointID {
-					updatedCollectionPoints = append(updatedCollectionPoints, cp)
-				}
+		// Iterate backward through the collection points of each application
+		for j := len(yamlData.Applications[i].CollectionPoints) - 1; j >= 0; j-- {
+			if yamlData.Applications[i].CollectionPoints[j].Id == collectionPointID {
+				// Delete collection point
+				yamlData.Applications[i].CollectionPoints = append(
+					yamlData.Applications[i].CollectionPoints[:j],
+					yamlData.Applications[i].CollectionPoints[j+1:]...,
+				)
 			}
-			yamlData.Applications[i].CollectionPoints = updatedCollectionPoints
-			break
 		}
 	}
 
@@ -597,6 +609,7 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	}
 
 	render.JSON(w, r, map[string]string{"message": "Collection point deleted successfully"})
+
 }
 
 
