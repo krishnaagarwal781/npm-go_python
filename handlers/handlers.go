@@ -138,12 +138,15 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	orgKey := r.URL.Query().Get("org_key")
 	orgSecret := r.URL.Query().Get("org_secret")
 
+	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
+
 
 	// verify the organisation id, key and secret
 	filter:=bson.M{"_id": orgID, "organisation_key": orgKey, "organisation_secret": orgSecret}
-	_,err := database.FindData(context.Background(), h.client, h.cfg.Dbname,"organisation_details", filter)
+	_,err := database.FindData(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			log.Error().Err(err).Msg("Invalid org_key or org_secret")
 			render.Status(r, http.StatusUnauthorized)
 			render.PlainText(w, r, "Invalid org_key or org_secret")
 			return
@@ -169,8 +172,8 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		"registered_at":    time.Now(),
 	}
 
-	// @TODO: change the collection name to something more meaningful
-	_,err = database.InsertData(context.Background(), h.client, h.cfg.Dbname,"application_collection", appData)
+	
+	_,err = database.InsertData(context.Background(), h.client, h.cfg.Dbname,"org_applications", appData)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert application details into mongodb.")
 		render.Status(r, http.StatusInternalServerError)
