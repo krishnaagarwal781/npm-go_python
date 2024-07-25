@@ -64,7 +64,7 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 		"developer_mobile":  data.DeveloperMobile,
 		"organisation_name": data.OrganisationName,
 		"org_secret":            secret,
-		"org_token":             token,
+		"org_key":             token,
 		"registered_at":     time.Now(),
 		"client_ip":         clientIP,
 		"headers":           headers,
@@ -142,20 +142,23 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 
 	// verify the organisation id, key and secret
-	filter:=bson.M{"_id": orgID, "organisation_key": orgKey, "organisation_secret": orgSecret}
-	_,err := database.FindData(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	filter:=bson.M{"organisation_id": orgID, "org_key": orgKey, "org_secret": orgSecret}
+	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	if count == 0 {
+		log.Debug().Msg("Invalid org_key or org_secret")
+		render.Status(r, http.StatusUnauthorized)
+		render.PlainText(w, r, "Invalid org_key or org_secret")
+		return
+	}
+
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			log.Error().Err(err).Msg("Invalid org_key or org_secret")
-			render.Status(r, http.StatusUnauthorized)
-			render.PlainText(w, r, "Invalid org_key or org_secret")
-			return
-		}
 		log.Error().Err(err).Msg("Failed to find organisation")
 		render.Status(r, http.StatusInternalServerError)
 		render.PlainText(w, r, "Failed to verify organisation")
 		return
 	}
+
+	log.Debug().Msgf("Creating application for org_id: %s", orgID)
 
 
 	// Generate application id
