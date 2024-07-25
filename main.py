@@ -25,15 +25,7 @@ class ApplicationDetails(BaseModel):
     application_user: str
 
 
-class CollectionPointRequest(BaseModel):
-    org_id: str
-    org_key: str
-    org_secret: str
-    application_id: str
-
-
 class Purpose(BaseModel):
-    purpose_id: str
     purpose_description: str
     purpose_language: str
 
@@ -45,13 +37,18 @@ class DataElement(BaseModel):
     data_owner: str
     legal_basis: str
     retention_period: str
-    cross_border: bool
-    sensitive: bool
-    encrypted: bool
-    data_principal: bool
     expiry: str
-    data_element_collection_status: str
     purposes: List[Purpose]
+
+
+class CollectionPointRequest(BaseModel):
+    org_id: str
+    org_key: str
+    org_secret: str
+    application_id: str
+    cp_name: str
+    cp_url: str
+    data_elements: List[DataElement]
 
 
 class CollectionPointDetails(BaseModel):
@@ -232,34 +229,36 @@ async def create_collection_point(data: CollectionPointRequest):
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Prepare collection point data from the request
+    # Prepare collection point data from the request for database insertion
     collection_point_data = {
         "org_id": data.org_id,
         "application_id": data.application_id,
-        "cp_name": "<Blank>",
+        "cp_name": data.cp_name,
         "cp_status": "active",
-        "cp_url": "<URL>",
+        "cp_url": data.cp_url,
         "data_elements": [
             {
-                "data_element": "<Blank>",
+                "data_element": de.data_element,
                 "data_element_collection_status": "active",
-                "data_element_title": "<Blank>",
-                "data_element_description": "<Blank>",
-                "data_owner": "<Blank>",
-                "legal_basis": "<Blank>",
-                "retention_period": "<Number> <days, month, year>",
+                "data_element_title": de.data_element_title,
+                "data_element_description": de.data_element_description,
+                "data_owner": de.data_owner,
+                "legal_basis": de.legal_basis,
+                "retention_period": de.retention_period,
                 "cross_border": False,
                 "sensitive": False,
                 "encrypted": False,
-                "expiry": "<Number> <days, month, year>",
+                "expiry": de.expiry,
                 "purposes": [
                     {
                         "purpose_id": secrets.token_hex(8),
-                        "purpose_description": "<Blank>",
-                        "purpose_language": "<EN, EU, HIN>",
+                        "purpose_description": purpose.purpose_description,
+                        "purpose_language": purpose.purpose_language,
                     }
+                    for purpose in de.purposes
                 ],
             }
+            for de in data.data_elements
         ],
         "registered_at": datetime.datetime.utcnow(),
     }
@@ -274,16 +273,35 @@ async def create_collection_point(data: CollectionPointRequest):
     # Retrieve the inserted cp_id
     cp_id = str(cp_result.inserted_id)
 
-    # Remove the _id field before returning collection_point_data
-    collection_point_data.pop("_id", None)
-    collection_point_data.pop("application_id", None)
-    collection_point_data.pop("org_id", None)
-    collection_point_data.pop("registered_at", None)
-
-    # Include cp_id at the beginning of the collection point data response
+    # Prepare response data by removing purpose_id and other fields
     response_data = {
         "cp_id": cp_id,
-        **collection_point_data,
+        "cp_name": data.cp_name,
+        "cp_status": "active",
+        "cp_url": data.cp_url,
+        "data_elements": [
+            {
+                "data_element": de.data_element,
+                "data_element_collection_status": "active",
+                "data_element_title": de.data_element_title,
+                "data_element_description": de.data_element_description,
+                "data_owner": de.data_owner,
+                "legal_basis": de.legal_basis,
+                "retention_period": de.retention_period,
+                "cross_border": False,
+                "sensitive": False,
+                "encrypted": False,
+                "expiry": de.expiry,
+                "purposes": [
+                    {
+                        "purpose_description": purpose.purpose_description,
+                        "purpose_language": purpose.purpose_language,
+                    }
+                    for purpose in de.purposes
+                ],
+            }
+            for de in data.data_elements
+        ],
     }
 
     return {
