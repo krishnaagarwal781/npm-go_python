@@ -9,6 +9,7 @@ import (
 	"go-python/utils"
 	"net/http"
 	"os"
+
 	// "strconv"
 
 	// "strconv"
@@ -21,8 +22,9 @@ import (
 
 	// "github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	// "go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Handler represents the application handler.
@@ -295,7 +297,7 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		},
 	}
 
-	// Insert data into collection_point_collection
+	// Insert data into collection_points
 	cpResult, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", collectionPointData)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert collection point details into mongodb.")
@@ -382,13 +384,15 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 		"org_secret":      orgSecret,
 	}
 
-	_, err = database.FindData(context.Background(), h.client, h.cfg.Dbname, "organisation_details", filter)
+	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	if count == 0 {
+		log.Debug().Msg("Invalid org_key or org_secret")
+		render.Status(r, http.StatusUnauthorized)
+		render.PlainText(w, r, "Invalid org_key or org_secret")
+		return
+	}
+
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			render.Status(r, http.StatusUnauthorized)
-			render.PlainText(w, r, "Invalid org_key or org_secret")
-			return
-		}
 		log.Error().Err(err).Msg("Failed to find organisation")
 		render.Status(r, http.StatusInternalServerError)
 		render.PlainText(w, r, "Failed to verify organisation")
@@ -413,41 +417,46 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Process each collection point in the YAML data
 	for _, application := range yamlData.Applications {
 		if application.ApplicationID == appID {
 			for _, cp := range application.CollectionPoints {
-				cpID := cp.Id
-				filter := bson.M{"_id": cpID}
-				var existingCP models.CollectionPointData
-				err := database.FindOne(context.Background(), h.client, h.cfg.Dbname, "collection_point_collection", filter).Decode(&existingCP)
-				if err != nil && err != mongo.ErrNoDocuments {
-					log.Error().Err(err).Msg("Failed to find collection point")
-					render.Status(r, http.StatusInternalServerError)
-					render.PlainText(w, r, "Failed to find collection point")
+				// Convert the cpID to ObjectID
+				cpID, err := primitive.ObjectIDFromHex(cp.Id)
+				if err != nil {
+					log.Error().Err(err).Msg("Invalid collection point ID")
+					render.Status(r, http.StatusBadRequest)
+					render.PlainText(w, r, "Invalid collection point ID")
 					return
 				}
-
-				if err == mongo.ErrNoDocuments {
+				filter := bson.M{"_id": cpID}
+	
+				// Check the count of documents with the filter
+				count, err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname, "collection_points", filter)
+				if err != nil {
+					log.Error().Err(err).Msg("Failed to count collection points")
+					render.Status(r, http.StatusInternalServerError)
+					render.PlainText(w, r, "Failed to count collection points")
+					return
+				}
+				log.Debug().Msgf("CP ID %s, Count %d", cpID.Hex(), count)
+				if count == 0 {
 					// Insert new collection point
-					cpData := models.CollectionPointData{
-						OrgID:      orgID,
-						AppID:      appID,
-						CPName:     cp.CPName,
-						CPStatus:   cp.CPStatus,
-						CPURL:      cp.CPURL,
-						DataElements: cp.DataElements,
+					cpData := bson.M{
+						"_id":          cpID,
+						"org_id":       orgID,
+						"app_id":       appID,
+						"cp_name":      cp.CPName,
+						"cp_status":    cp.CPStatus,
+						"cp_url":       cp.CPURL,
+						"data_elements": cp.DataElements,
 					}
-					cpResult, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_point_collection", cpData)
+					_, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", cpData)
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to insert collection point")
 						render.Status(r, http.StatusInternalServerError)
 						render.PlainText(w, r, "Failed to insert collection point")
 						return
 					}
-					cpId := cpResult.InsertedID
-					// Convert the cpID to string
-					cp.Id = cpId.(primitive.ObjectID).Hex()
 				} else {
 					// Update existing collection point
 					update := bson.M{
@@ -458,7 +467,7 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 							"data_elements": cp.DataElements,
 						},
 					}
-					_, err = database.UpdateData(context.Background(), h.client, h.cfg.Dbname, "collection_point_collection", filter, update)
+					_, err = database.UpdateData(context.Background(), h.client, h.cfg.Dbname, "collection_points", filter, update)
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to update collection point")
 						render.Status(r, http.StatusInternalServerError)
@@ -469,7 +478,7 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
+	
 	// Write the updated YAML data back to the file
 	yamlFilename := fmt.Sprintf("%s_applications.yaml", orgID)
 	newYamlData, err := yaml.Marshal(&yamlData)
@@ -525,7 +534,7 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 
 	// Delete collection point from MongoDB
 	filter = bson.M{"_id": collectionPointID, "org_id": orgID}
-	deleteResult, err := database.DeleteOne(context.Background(), h.client, h.cfg.Dbname, "collection_point_collection", filter)
+	deleteResult, err := database.DeleteOne(context.Background(), h.client, h.cfg.Dbname, "collection_points", filter)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete collection point")
 		render.Status(r, http.StatusInternalServerError)
@@ -623,7 +632,7 @@ func (h *Handler) GetCollectionPoints(w http.ResponseWriter, r *http.Request) {
 
 	// Retrieve all collection points for the specified org_id and application_id
 	filter = bson.M{"org_id": orgID, "app_id": applicationID}
-	cursor, err := database.FindData(context.Background(), h.client, h.cfg.Dbname, "collection_point_collection", filter)
+	cursor, err := database.FindData(context.Background(), h.client, h.cfg.Dbname, "collection_points", filter)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to find collection points")
 		render.Status(r, http.StatusInternalServerError)
