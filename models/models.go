@@ -95,7 +95,10 @@ type Purpose struct {
 type YamlTemplate struct {
 	Version      string        `yaml:"version"`
 	Applications []Application `yaml:"applications"`
+	Company	  Company       `yaml:"company"`
+
 }
+
 
 // Application represents the application structure in the YAML file
 type Application struct {
@@ -104,6 +107,11 @@ type Application struct {
 	CollectionPoints []CollectionPointData `yaml:"collection_points"`
 }
 
+type Company struct{
+	CompanyID string `json:"company_id" bson:"company_id" yaml:"company_id"`
+	CompanyName string `json:"name" bson:"name" yaml:"name"`
+	CompanyWebsite string `json:"website" bson:"website" yaml:"website"`
+}
 
 
 
