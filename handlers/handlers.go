@@ -75,11 +75,14 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 		log.Error().Err(err).Msg("Failed to insert developer details into mongodb.")
 	}
 
+
+
+
 	// Insert data into organisation collection
 	orgData := bson.M{
 		"organisation_name":    data.OrganisationName,
 		"developer_email":      data.DeveloperEmail,
-		"developer_details_id": insertDevResult.InsertedID,
+		"developer_details_id": utils.ConvertObjectIDToString(insertDevResult.InsertedID),
 		"registered_at":        time.Now(),
 	}
 
@@ -91,7 +94,7 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	// update the developer details with the organisation id
 	update := bson.M{
 		"$set": bson.M{
-			"organisation_id": insertOrgResult.InsertedID,
+			"organisation_id": utils.ConvertObjectIDToString(insertOrgResult.InsertedID),
 		},
 	}
 	filter := bson.M{"_id": insertDevResult.InsertedID}
@@ -100,7 +103,7 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 		log.Error().Err(err).Msg("Failed to update developer details")
 	}
 
-	envContent := fmt.Sprintf("ORG_ID=%s\nORG_KEY=%s\nORG_SECRET=%s\n", insertOrgResult.InsertedID, token, secret)
+	envContent := fmt.Sprintf("ORG_ID=%s\nORG_KEY=%s\nORG_SECRET=%s\n", utils.ConvertObjectIDToString(insertOrgResult.InsertedID), token, secret)
 	err = os.WriteFile(".env", []byte(envContent), 0644)
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
@@ -112,8 +115,9 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 
 
 	response := map[string]string{
-		"secret": secret,
-		"token":  token,
+		"org_id":   utils.ConvertObjectIDToString(insertOrgResult.InsertedID),
+		"org_secret": secret,
+		"org_key":  token,
 	}
 	render.JSON(w, r, response)
 }
@@ -345,6 +349,7 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 }
 
 
+//@Todo: Check update yaml for duplicating data instead of updating
 // PushYaml handles the YAML file upload and updates MongoDB accordingly
 func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 	// Parse the multipart form
@@ -431,7 +436,9 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 						render.PlainText(w, r, "Failed to insert collection point")
 						return
 					}
-					cp.Id = cpResult.InsertedID.(string)
+					cpId := cpResult.InsertedID
+					// Convert the cpID to string
+					cp.Id = cpId.(primitive.ObjectID).Hex()
 				} else {
 					// Update existing collection point
 					update := bson.M{
@@ -483,6 +490,9 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	orgKey := r.URL.Query().Get("org_key")
 	orgSecret := r.URL.Query().Get("org_secret")
 
+	log.Debug().Msgf("Deleting collection point: %s", collectionPointID)
+	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
+
 	// Verify org_key and org_secret
 	filter := bson.M{
 		"organisation_id": orgID,
@@ -491,7 +501,7 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var organisation models.OrganisationDetails
-	err := database.FindOne(context.Background(), h.client, h.cfg.Dbname, "organisation_details", filter).Decode(&organisation)
+	err := database.FindOne(context.Background(), h.client, h.cfg.Dbname, "developer_details", filter).Decode(&organisation)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			render.Status(r, http.StatusUnauthorized)

@@ -1,9 +1,11 @@
 package utils
 
 import (
-	"github.com/google/uuid"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func GenerateUUID(len int) string {
@@ -30,4 +32,10 @@ func GetHeaders(r *http.Request) map[string]string {
 		headers[name] = strings.Join(values, ",")
 	}
 	return headers
+}
+
+func ConvertObjectIDToString(id interface{}) string {
+	// Convert the object ID to a string.
+	IdString := id.(primitive.ObjectID).Hex()
+	return IdString
 }

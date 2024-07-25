@@ -16,5 +16,13 @@ func Initialize(cfg *models.Config) {
 	}
 
 	zerolog.SetGlobalLevel(level)
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+	 // Create a logger instance for all log levels
+	 AppLogger := zerolog.New(os.Stderr).With().Timestamp().Logger()
+
+	 // Set global logger
+	 log.Logger = AppLogger
+ 
+	 log.Info().Msg("Logger initialized successfully")
+	
 }
