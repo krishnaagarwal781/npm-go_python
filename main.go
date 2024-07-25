@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "context"
 	"context"
 	"go-python/config"
 	"go-python/database"
@@ -10,12 +9,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	// "github.com/go-chi/chi/v5/middleware"
-
-	// "github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	// "go.mongodb.org/mongo-driver/mongo"
-	// "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
@@ -36,7 +30,7 @@ func main() {
 
 	// Initialize router
 	r := chi.NewRouter()
-	// r.Use(middleware.Logger)
+	
 
 	// Initialize routes
 	routes.InitializeRoutes(r, client, cfg)

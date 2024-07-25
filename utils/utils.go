@@ -22,6 +22,12 @@ func GetClientIP(r *http.Request) string {
 	if clientIP == "" {
 		clientIP = r.RemoteAddr
 	}
+
+	// If the IP is in the format host:port, remove the port
+	if strings.Contains(clientIP, ":") {
+		clientIP = strings.Split(clientIP, ":")[0]
+	}
+
 	return clientIP
 }
 
@@ -34,6 +40,7 @@ func GetHeaders(r *http.Request) map[string]string {
 	return headers
 }
 
+// ConvertObjectIDToString converts an object ID to a string
 func ConvertObjectIDToString(id interface{}) string {
 	// Convert the object ID to a string.
 	IdString := id.(primitive.ObjectID).Hex()
