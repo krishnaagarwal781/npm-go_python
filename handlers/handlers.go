@@ -629,19 +629,23 @@ func (h *Handler) GetCollectionPoints(w http.ResponseWriter, r *http.Request) {
 		"org_secret":      orgSecret,
 	}
 
-	var organisation models.OrganisationDetails
-	err := database.FindOne(context.Background(), h.client, h.cfg.Dbname, "organisation_details", filter).Decode(&organisation)
+	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
+
+	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	if count == 0 {
+		log.Debug().Msg("Invalid org_key or org_secret")
+		render.Status(r, http.StatusUnauthorized)
+		render.PlainText(w, r, "Invalid org_key or org_secret")
+		return
+	}
+
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			render.Status(r, http.StatusUnauthorized)
-			render.PlainText(w, r, "Invalid org_key or org_secret")
-			return
-		}
 		log.Error().Err(err).Msg("Failed to find organisation")
 		render.Status(r, http.StatusInternalServerError)
 		render.PlainText(w, r, "Failed to verify organisation")
 		return
 	}
+
 
 	// Retrieve all collection points for the specified org_id and application_id
 	filter = bson.M{"org_id": orgID, "app_id": applicationID}
