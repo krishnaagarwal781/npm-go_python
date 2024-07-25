@@ -50,6 +50,15 @@ func InsertData(ctx context.Context, client *mongo.Client, database_name string,
 	return result,nil
 }
 
+func CountDocuments(ctx context.Context, client *mongo.Client, database_name string, collection_name string, filter interface{}) (int64,error) {
+	collection := client.Database(database_name).Collection(collection_name)
+	count, err := collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0,err
+	}
+	return count,nil
+}
+
 func FindData(ctx context.Context, client *mongo.Client, database_name string, collection_name string, filter interface{}) (*mongo.Cursor,error) {
 	
 	collection := client.Database(database_name).Collection(collection_name)
