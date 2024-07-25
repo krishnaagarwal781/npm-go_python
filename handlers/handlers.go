@@ -247,13 +247,17 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		"org_secret":      data.OrganisationSecret,
 	}
 
-	_,err := database.FindData(context.Background(), h.client, h.cfg.Dbname, "organisation_details", filter)
+	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", data.OrgID, data.OrganisationKey, data.OrganisationSecret)
+
+	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	if count == 0 {
+		log.Debug().Msg("Invalid org_key or org_secret")
+		render.Status(r, http.StatusUnauthorized)
+		render.PlainText(w, r, "Invalid org_key or org_secret")
+		return
+	}
+
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			render.Status(r, http.StatusUnauthorized)
-			render.PlainText(w, r, "Invalid org_key or org_secret")
-			return
-		}
 		log.Error().Err(err).Msg("Failed to find organisation")
 		render.Status(r, http.StatusInternalServerError)
 		render.PlainText(w, r, "Failed to verify organisation")
@@ -292,7 +296,7 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Insert data into collection_point_collection
-	cpResult, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_point_collection", collectionPointData)
+	cpResult, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", collectionPointData)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert collection point details into mongodb.")
 		render.Status(r, http.StatusInternalServerError)
@@ -300,7 +304,7 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cpID := cpResult.InsertedID
+	cpID := utils.ConvertObjectIDToString(cpResult.InsertedID)
 	
 
 	// Read the existing YAML file
@@ -321,10 +325,9 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Convert the cpID to string
-	cpIDString := cpID.(primitive.ObjectID).Hex()
+	
 
-	collectionPointData.Id = cpIDString
+	collectionPointData.Id = cpID
 
 	// Update the YAML data
 	for i := range yamlData.Applications {
