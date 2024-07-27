@@ -1,15 +1,15 @@
-from pydantic import BaseModel
-from pymongo import MongoClient
-from fastapi import FastAPI, Request, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from pymongo import MongoClient
+from bson import ObjectId
 import secrets
 import datetime
-from bson import ObjectId
 from typing import List
 import yaml
 
-
+# Pydantic models
 class DeveloperDetails(BaseModel):
     developer_email: str
     developer_website: str
@@ -71,6 +71,16 @@ class ApplicationDetailsRequest(BaseModel):
     application_details: ApplicationDetailsExtended
 
 
+class ConsentPreferenceRequest(BaseModel):
+    org_id: str
+    org_key: str
+    org_secret: str
+    application_id: str
+    collection_point_id: str
+    purpose_id: str
+    consent: bool
+
+# MongoDB connection
 client = MongoClient(
     "mongodb+srv://sniplyuser:NXy7R7wRskSrk3F2@cataxprod.iwac6oj.mongodb.net/?retryWrites=true&w=majority"
 )
@@ -80,6 +90,7 @@ organisation_collection = db["organisation_details"]
 application_collection = db["org_applications"]
 collection_point_collection = db["collection_points"]
 
+# FastAPI app setup
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -89,11 +100,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.get("/")
 async def read_root():
     return {"message": "Welcome bhidu"}
-
 
 @app.post("/package-register")
 async def package_register(request: Request, data: DeveloperDetails):
@@ -188,7 +197,6 @@ async def create_application(
             status_code=500, detail="Failed to insert application details"
         )
 
-    # Prepare the YAML-like JSON structure to return
     yaml_data = {
         "version": "1.0",
         "organisation_id": org_id,
@@ -228,7 +236,6 @@ async def create_collection_point(data: CollectionPointRequest):
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Prepare collection point data from the request for database insertion
     collection_point_data = {
         "org_id": data.org_id,
         "application_id": data.application_id,
@@ -261,25 +268,20 @@ async def create_collection_point(data: CollectionPointRequest):
         "registered_at": datetime.datetime.utcnow(),
     }
 
-    # Insert the collection point data into MongoDB
     cp_result = collection_point_collection.insert_one(collection_point_data)
     if not cp_result.acknowledged:
         raise HTTPException(
             status_code=500, detail="Failed to insert collection point details"
         )
 
-    # Retrieve the inserted cp_id
     cp_id = str(cp_result.inserted_id)
 
-    # Generate the cp_url dynamically
     cp_url = f"demo.api.com/{cp_id}"
 
-    # Update the collection point data with the generated cp_url
     collection_point_collection.update_one(
         {"_id": cp_result.inserted_id}, {"$set": {"cp_url": cp_url}}
     )
 
-    # Prepare response data by removing purpose_id and other fields
     response_data = {
         "cp_id": cp_id,
         "cp_name": data.cp_name,
@@ -324,20 +326,17 @@ async def push_yaml(
     org_key: str = Form(...),
     org_secret: str = Form(...),
 ):
-    # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Load YAML data
     try:
         yaml_data = yaml.safe_load(yaml_file.file)
     except yaml.YAMLError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid YAML file: {exc}")
 
-    # Process each collection point in YAML data
     for application in yaml_data.get("applications", []):
         if application.get("application_id") == app_id:
             for cp_details in application.get("collection_points_data", []):
@@ -347,7 +346,6 @@ async def push_yaml(
                         {"_id": ObjectId(cp_id)}
                     )
                     if existing_cp:
-                        # Update existing collection point
                         update_result = collection_point_collection.update_one(
                             {"_id": ObjectId(cp_id)},
                             {
@@ -356,7 +354,6 @@ async def push_yaml(
                                     "cp_status": cp_details["cp_status"],
                                     "cp_url": cp_details["cp_url"],
                                     "data_elements": cp_details["data_elements"],
-                                    # Add more fields as needed
                                 }
                             },
                         )
@@ -366,13 +363,11 @@ async def push_yaml(
                                 detail=f"Failed to update collection point {cp_id}",
                             )
                     else:
-                        # Handle scenario where collection_point_id is not found
                         raise HTTPException(
                             status_code=404,
                             detail=f"Collection point {cp_id} not found",
                         )
                 else:
-                    # Handle scenario where collection_point_id is missing in YAML
                     raise HTTPException(
                         status_code=400,
                         detail="collection_point_id is required for each collection point",
@@ -387,18 +382,15 @@ async def push_yaml(
 async def delete_collection_point(
     collection_point_id: str, org_id: str, org_key: str, org_secret: str
 ):
-    # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Attempt to delete the collection point
     delete_result = collection_point_collection.delete_one(
         {"_id": ObjectId(collection_point_id), "org_id": org_id}
     )
-    # Check if the collection point was not found
     if delete_result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Collection point not found")
 
@@ -409,14 +401,12 @@ async def delete_collection_point(
 async def get_collection_points(
     app_id: str, org_id: str, org_key: str, org_secret: str
 ):
-    # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Retrieve collection points for the given org_id and app_id
     collection_points = list(
         collection_point_collection.find({"org_id": org_id, "application_id": app_id})
     )
@@ -424,7 +414,6 @@ async def get_collection_points(
     if not collection_points:
         raise HTTPException(status_code=404, detail="No collection points found")
 
-    # Convert MongoDB ObjectId and datetime to string for JSON serialization
     for cp in collection_points:
         cp["_id"] = str(cp["_id"])
         if "registered_at" in cp:
@@ -442,14 +431,12 @@ async def get_collection_points(
 async def get_notice_info(
     cp_id: str, app_id: str, org_id: str, org_key: str, org_secret: str
 ):
-    # Verify org_key and org_secret
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Retrieve collection point for the given cp_id, org_id, and app_id
     collection_point = collection_point_collection.find_one(
         {"_id": ObjectId(cp_id), "org_id": org_id, "application_id": app_id}
     )
@@ -459,7 +446,6 @@ async def get_notice_info(
             status_code=404, detail=f"Collection point with ID {cp_id} not found"
         )
 
-    # Construct notice_info response for the specific collection point
     notice_info = {
         "urls": {
             "logo": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2K4cwj_yTWk-rSebFdFF-tX1yMKE8o_Uwnk5H9GYkIoqSKHAvt-pYaB1dEQHK1paNNk&usqp=CAU",
@@ -622,13 +608,13 @@ async def get_notice_info(
         },
     }
 
-    # Populate collection point data in notice_info
     data_elements = []
     for de in collection_point.get("data_elements", []):
         purposes = []
         for purpose in de.get("purposes", []):
             purposes.append(
                 {
+                    "purpose_id": purpose.get("purpose_id", ""),
                     "purpose_description": purpose.get("purpose_description", ""),
                     "purpose_language": purpose.get("purpose_language", ""),
                 }
@@ -669,3 +655,33 @@ async def get_notice_info(
     notice_info["kashmiri"]["collection_point"] = collection_point_info
 
     return {"notice_info": notice_info}
+
+@app.post("/post-consent-preference")
+async def post_consent_preference(data: ConsentPreferenceRequest):
+    organisation = developer_details_collection.find_one(
+        {"organisation_id": data.org_id, "org_key": data.org_key, "org_secret": data.org_secret}
+    )
+    if not organisation:
+        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
+
+    collection_point = collection_point_collection.find_one(
+        {"_id": ObjectId(data.collection_point_id), "org_id": data.org_id, "application_id": data.application_id}
+    )
+    if not collection_point:
+        raise HTTPException(status_code=404, detail="Collection point not found")
+
+    for data_element in collection_point.get("data_elements", []):
+        if data_element["data_element"] == "home_address":
+            for purpose in data_element.get("purposes", []):
+                if purpose["purpose_id"] == data.purpose_id:
+                    purpose["consent"] = data.consent
+                    break
+
+    update_result = collection_point_collection.update_one(
+        {"_id": ObjectId(data.collection_point_id)},
+        {"$set": {"data_elements": collection_point["data_elements"]}}
+    )
+    if not update_result.modified_count:
+        raise HTTPException(status_code=500, detail="Failed to update consent preference")
+
+    return JSONResponse(content={"message": "Consent preference updated successfully"})
