@@ -72,14 +72,18 @@ class ApplicationDetailsRequest(BaseModel):
     application_details: ApplicationDetailsExtended
 
 
+class Purpose(BaseModel):
+    purpose_id: str
+    consent: bool
+
+
 class ConsentPreferenceRequest(BaseModel):
     org_id: str
     org_key: str
     org_secret: str
     application_id: str
     collection_point_id: str
-    purpose_id: str
-    consent: bool
+    purposes: List[Purpose]
 
 
 # MongoDB connection
@@ -663,6 +667,7 @@ async def get_notice_info(
 
 @app.post("/post-consent-preference")
 async def post_consent_preference(data: ConsentPreferenceRequest):
+    # Validate organisation
     organisation = developer_details_collection.find_one(
         {
             "organisation_id": data.org_id,
@@ -673,29 +678,54 @@ async def post_consent_preference(data: ConsentPreferenceRequest):
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
+    # Validate application
+    application = application_collection.find_one(
+        {"org_id": data.org_id, "app_id": data.application_id}
+    )
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Validate collection point
     collection_point = collection_point_collection.find_one(
-        {
-            "_id": ObjectId(data.collection_point_id),
-            "org_id": data.org_id,
-            "application_id": data.application_id,
-        }
+        {"_id": ObjectId(data.collection_point_id), "org_id": data.org_id}
     )
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
 
-    for data_element in collection_point.get("data_elements", []):
-        for purpose in data_element.get("purposes", []):
-            if purpose["purpose_id"] == data.purpose_id:
-                purpose["consent"] = data.consent
-                break
+    # Process each purpose
+    updated_purposes = []
+    for purpose in data.purposes:
+        purpose_id = purpose.purpose_id
+        consent = purpose.consent
 
-    update_result = collection_point_collection.update_one(
-        {"_id": ObjectId(data.collection_point_id)},
-        {"$set": {"data_elements": collection_point["data_elements"]}},
-    )
-    if not update_result.modified_count:
-        raise HTTPException(
-            status_code=500, detail="Failed to update consent preference"
+        # Validate purpose
+        if not purpose_id or consent is None:
+            raise HTTPException(
+                status_code=400, detail="Purpose ID and consent status are required"
+            )
+
+        purpose_update_result = collection_point_collection.update_one(
+            {
+                "_id": ObjectId(data.collection_point_id),
+                "data_elements.purposes.purpose_id": purpose_id,
+            },
+            {"$set": {"data_elements.$[elem].purposes.$[purp].consent": consent}},
+            array_filters=[
+                {"elem.data_element": {"$exists": True}},
+                {"purp.purpose_id": purpose_id},
+            ],
         )
 
-    return JSONResponse(content={"message": "Consent preference updated successfully"})
+        if purpose_update_result.modified_count == 0:
+            raise HTTPException(
+                status_code=500, detail=f"Failed to update purpose {purpose_id}"
+            )
+
+        updated_purposes.append(purpose_id)
+
+    return JSONResponse(
+        content={
+            "message": "Consent preferences updated successfully",
+            "updated_purposes": updated_purposes,
+        }
+    )
