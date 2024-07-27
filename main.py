@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, File
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,6 +8,7 @@ import secrets
 import datetime
 from typing import List
 import yaml
+
 
 # Pydantic models
 class DeveloperDetails(BaseModel):
@@ -80,6 +81,7 @@ class ConsentPreferenceRequest(BaseModel):
     purpose_id: str
     consent: bool
 
+
 # MongoDB connection
 client = MongoClient(
     "mongodb+srv://sniplyuser:NXy7R7wRskSrk3F2@cataxprod.iwac6oj.mongodb.net/?retryWrites=true&w=majority"
@@ -100,9 +102,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 async def read_root():
     return {"message": "Welcome bhidu"}
+
 
 @app.post("/package-register")
 async def package_register(request: Request, data: DeveloperDetails):
@@ -656,32 +660,42 @@ async def get_notice_info(
 
     return {"notice_info": notice_info}
 
+
 @app.post("/post-consent-preference")
 async def post_consent_preference(data: ConsentPreferenceRequest):
     organisation = developer_details_collection.find_one(
-        {"organisation_id": data.org_id, "org_key": data.org_key, "org_secret": data.org_secret}
+        {
+            "organisation_id": data.org_id,
+            "org_key": data.org_key,
+            "org_secret": data.org_secret,
+        }
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
     collection_point = collection_point_collection.find_one(
-        {"_id": ObjectId(data.collection_point_id), "org_id": data.org_id, "application_id": data.application_id}
+        {
+            "_id": ObjectId(data.collection_point_id),
+            "org_id": data.org_id,
+            "application_id": data.application_id,
+        }
     )
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
 
     for data_element in collection_point.get("data_elements", []):
-        if data_element["data_element"] == "home_address":
-            for purpose in data_element.get("purposes", []):
-                if purpose["purpose_id"] == data.purpose_id:
-                    purpose["consent"] = data.consent
-                    break
+        for purpose in data_element.get("purposes", []):
+            if purpose["purpose_id"] == data.purpose_id:
+                purpose["consent"] = data.consent
+                break
 
     update_result = collection_point_collection.update_one(
         {"_id": ObjectId(data.collection_point_id)},
-        {"$set": {"data_elements": collection_point["data_elements"]}}
+        {"$set": {"data_elements": collection_point["data_elements"]}},
     )
     if not update_result.modified_count:
-        raise HTTPException(status_code=500, detail="Failed to update consent preference")
+        raise HTTPException(
+            status_code=500, detail="Failed to update consent preference"
+        )
 
     return JSONResponse(content={"message": "Consent preference updated successfully"})
