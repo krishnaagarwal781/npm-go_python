@@ -34,10 +34,10 @@ class DataElement(BaseModel):
     data_element: str
     data_element_title: str
     data_element_description: str
-    data_owner: str
+    data_owner: List[str]
     legal_basis: str
-    retention_period: str
-    expiry: str
+    retention_period: int
+    expiry: int
     purposes: List[Purpose]
 
 
@@ -47,7 +47,6 @@ class CollectionPointRequest(BaseModel):
     org_secret: str
     application_id: str
     cp_name: str
-    cp_url: str
     data_elements: List[DataElement]
 
 
@@ -75,7 +74,7 @@ class ApplicationDetailsRequest(BaseModel):
 client = MongoClient(
     "mongodb+srv://sniplyuser:NXy7R7wRskSrk3F2@cataxprod.iwac6oj.mongodb.net/?retryWrites=true&w=majority"
 )
-db = client["python-go2"]
+db = client["python-go3"]
 developer_details_collection = db["developer_details"]
 organisation_collection = db["organisation_details"]
 application_collection = db["org_applications"]
@@ -235,7 +234,6 @@ async def create_collection_point(data: CollectionPointRequest):
         "application_id": data.application_id,
         "cp_name": data.cp_name,
         "cp_status": "active",
-        "cp_url": data.cp_url,
         "data_elements": [
             {
                 "data_element": de.data_element,
@@ -273,12 +271,20 @@ async def create_collection_point(data: CollectionPointRequest):
     # Retrieve the inserted cp_id
     cp_id = str(cp_result.inserted_id)
 
+    # Generate the cp_url dynamically
+    cp_url = f"demo.api.com/{cp_id}"
+
+    # Update the collection point data with the generated cp_url
+    collection_point_collection.update_one(
+        {"_id": cp_result.inserted_id}, {"$set": {"cp_url": cp_url}}
+    )
+
     # Prepare response data by removing purpose_id and other fields
     response_data = {
         "cp_id": cp_id,
         "cp_name": data.cp_name,
         "cp_status": "active",
-        "cp_url": data.cp_url,
+        "cp_url": cp_url,
         "data_elements": [
             {
                 "data_element": de.data_element,
