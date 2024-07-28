@@ -194,6 +194,9 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 			{
 				ApplicationID:    appID,
 				Type:             data.AppType,
+				Name: 		   	  data.AppName,
+				Stage: 		  	  data.AppStage,
+				ApplicationUser: data.ApplicationUser,
 				CollectionPoints: []models.CollectionPointData{},
 			},
 		},
@@ -269,8 +272,6 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 
 	// Generate default values for the collection point
 	collectionPointData := models.CollectionPointData{
-		OrgID:     data.OrgID,
-		AppID:     data.AppID,
 		CPName:    "Default Collection Point",
 		CPStatus:  "active",
 		CPURL:     "http://default-url.com",
@@ -279,7 +280,7 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 				DataElement:                 "default_element",
 				DataElementTitle:            "Default Element Title",
 				DataElementDescription:      "Default Element Description",
-				DataOwner:                   "Default Owner",
+				DataOwner:                   []string{"Entity 1", "Entity 2"},
 				LegalBasis:                  "Default Legal Basis",
 				RetentionPeriod:             "1 year",
 				CrossBorder:                 false,
@@ -289,7 +290,6 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 				DataElementCollectionStatus: "active",
 				Purposes: []models.Purpose{
 					{
-						PurposeID:          "default_purpose_id",
 						PurposeDescription: "Default Purpose Description",
 						PurposeLanguage:    "EN",
 					},

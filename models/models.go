@@ -43,7 +43,7 @@ type ApplicationDetails struct {
 	AppType         string `json:"app_type" bson:"app_type"`
 	AppName         string `json:"app_name" bson:"app_name"`
 	AppStage        string `json:"app_stage" bson:"app_stage"`
-	ApplicationUser string `json:"application_user" bson:"application_user"`
+	ApplicationUser []string `json:"application_user" bson:"application_user"`
 	OrganisationID  string `json:"org_id" bson:"org_id"`
 	ApplicationID   string `json:"app_id" bson:"app_id"`
 	Registered_at	time.Time `json:"registered_at" bson:"registered_at"`
@@ -53,11 +53,28 @@ type ApplicationDetails struct {
 
 
 
+// YamlTemplate represents the top-level structure in the YAML file
+type YamlTemplate struct {
+	Version      string        `yaml:"version"`
+	OrganisationID string `yaml:"organisation_id"`
+	Applications []Application `yaml:"applications"`
+}
+
+
+// Application represents the application structure in the YAML file
+type Application struct {
+	ApplicationID    string   `yaml:"application_id"`
+	Type	string   `yaml:"type"`
+	Name   string   `yaml:"name"`
+	Stage  string   `yaml:"stage"`
+	ApplicationUser []string `yaml:"application_user"`
+	CollectionPoints []CollectionPointData `yaml:"collection_points_data"`
+}
+
+
 
 type CollectionPointData struct {
-	Id		 string         `bson:"_id,omitempty" json:"id" yaml:"id"`
-	OrgID      string         `bson:"org_id" json:"org_id" yaml:"org_id"`
-	AppID      string         `bson:"app_id" json:"application_id" yaml:"application_id"`
+	Id		 string         `bson:"_id,omitempty" json:"id" yaml:"cp_id"`
 	CPName     string         `bson:"cp_name" json:"cp_name" yaml:"cp_name"`
 	CPStatus   string         `bson:"cp_status" json:"cp_status" yaml:"cp_status"`
 	CPURL      string         `bson:"cp_url" json:"cp_url" yaml:"cp_url"`
@@ -66,22 +83,23 @@ type CollectionPointData struct {
 
 type DataElement struct {
 	DataElement                 string     `bson:"data_element" json:"data_element" yaml:"data_element"`
+	DataElementCollectionStatus string     `bson:"data_element_collection_status" json:"data_element_collection_status" yaml:"data_element_collection_status"`
 	DataElementTitle            string     `bson:"data_element_title" json:"data_element_title" yaml:"data_element_title"`
 	DataElementDescription      string     `bson:"data_element_description" json:"data_element_description" yaml:"data_element_description"`
-	DataOwner                   string     `bson:"data_owner" json:"data_owner" yaml:"data_owner"`
+	DataOwner                   []string     `bson:"data_owner" json:"data_owner" yaml:"data_owner"`
 	LegalBasis                  string     `bson:"legal_basis" json:"legal_basis" yaml:"legal_basis"`
 	RetentionPeriod             string     `bson:"retention_period" json:"retention_period" yaml:"retention_period"`
 	CrossBorder                 bool       `bson:"cross_border" json:"cross_border" yaml:"cross_border"`
 	Sensitive                   bool       `bson:"sensitive" json:"sensitive" yaml:"sensitive"`
 	Encrypted                   bool       `bson:"encrypted" json:"encrypted" yaml:"encrypted"`
 	Expiry                      string     `bson:"expiry" json:"expiry" yaml:"expiry"`
-	DataElementCollectionStatus string     `bson:"data_element_collection_status" json:"data_element_collection_status" yaml:"data_element_collection_status"`
+	
 	Purposes                    []Purpose  `bson:"purposes" json:"purposes" yaml:"purposes"`
 	Registered_at			   time.Time  `bson:"registered_at" json:"registered_at" yaml:"registered_at"`
 }
 
 type Purpose struct {
-	PurposeID          string `bson:"purpose_id" json:"purpose_id" yaml:"purpose_id"`
+	// PurposeID          string `bson:"purpose_id" json:"purpose_id" yaml:"purpose_id"`
 	PurposeDescription string `bson:"purpose_description" json:"purpose_description" yaml:"purpose_description"`
 	PurposeLanguage    string `bson:"purpose_language" json:"purpose_language" yaml:"purpose_language"`
 }
@@ -91,27 +109,9 @@ type Purpose struct {
 
 
 
-// YamlTemplate represents the top-level structure in the YAML file
-type YamlTemplate struct {
-	Version      string        `yaml:"version"`
-	Applications []Application `yaml:"applications"`
-	Company	  Company       `yaml:"company"`
-
-}
 
 
-// Application represents the application structure in the YAML file
-type Application struct {
-	ApplicationID    string   `yaml:"application_id"`
-	Type	string   `yaml:"type"`
-	CollectionPoints []CollectionPointData `yaml:"collection_points"`
-}
 
-type Company struct{
-	CompanyID string `json:"company_id" bson:"company_id" yaml:"company_id"`
-	CompanyName string `json:"name" bson:"name" yaml:"name"`
-	CompanyWebsite string `json:"website" bson:"website" yaml:"website"`
-}
 
 
 
