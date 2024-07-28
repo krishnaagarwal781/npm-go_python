@@ -103,7 +103,6 @@ type DataElement struct {
 	Expiry                      int32     `bson:"expiry" json:"expiry" yaml:"expiry"`
 	
 	Purposes                    []Purpose  `bson:"purposes" json:"purposes" yaml:"purposes"`
-	Registered_at			   time.Time  `bson:"registered_at" json:"registered_at" yaml:"registered_at"`
 }
 
 type Purpose struct {
@@ -136,4 +135,9 @@ type CollectionPointRequest struct {
 type CollectionPointResponse struct {
 	Message string `json:"message"`
 	CollectionPointData CollectionPointData `json:"collection_point_data"`
+}
+
+type YamlUpdateResponse struct {
+	Message string `json:"message"`
+	YamlData YamlTemplate `json:"yaml_data"`
 }

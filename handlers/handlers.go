@@ -326,26 +326,20 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify org_key and org_secret
-	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
-	if count == 0 {
-		log.Debug().Msg("Invalid org_key or org_secret")
+	isAuthorised,err:=database.IsAuthorised(context.Background(), h.client, h.cfg.Dbname, "developer_details", filter)
+	if err != nil || !isAuthorised {
+		log.Error().Err(err).Msg("Failed to verify organisation")
 		render.Status(r, http.StatusUnauthorized)
-		render.PlainText(w, r, "Invalid org_key or org_secret")
-		return
-	}
-
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to find organisation")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to verify organisation")
+		render.JSON(w, r, map[string]string{"message": "Failed to verify organisation"})
 		return
 	}
 
 	// Get the uploaded YAML file
 	file, _, err := r.FormFile("yaml_file")
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to get YAML file")
 		render.Status(r, http.StatusBadRequest)
-		render.PlainText(w, r, "Failed to get the uploaded file")
+		render.JSON(w, r, map[string]string{"message": "Failed to get YAML file"})
 		return
 	}
 	defer file.Close()
@@ -354,8 +348,16 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 	var yamlData models.YamlTemplate
 	decoder := yaml.NewDecoder(file)
 	if err := decoder.Decode(&yamlData); err != nil {
+		log.Error().Err(err).Msg("Failed to decode YAML file")
 		render.Status(r, http.StatusBadRequest)
-		render.PlainText(w, r, fmt.Sprintf("Invalid YAML file: %v", err))
+		render.JSON(w, r, map[string]string{"message": "Failed to decode YAML file"})
+		return
+	}
+
+	if yamlData.OrganisationID != orgID {
+		log.Error().Msg("Organisation ID mismatch")
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"message": "Organisation ID mismatch"})
 		return
 	}
 
@@ -370,7 +372,7 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					log.Error().Err(err).Msg("Invalid collection point ID")
 					render.Status(r, http.StatusBadRequest)
-					render.PlainText(w, r, "Invalid collection point ID")
+					render.JSON(w, r, map[string]string{"message": "Invalid collection point ID"})
 					return
 				}
 				filter := bson.M{"_id": cpID}
@@ -386,23 +388,30 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 				log.Debug().Msgf("CP ID %s, Count %d", cpID.Hex(), count)
 				// Insert or update the collection point
 				if count == 0 {
-					// Insert new collection point
-					cpData := bson.M{
-						"_id":          cpID,
-						"org_id":       orgID,
-						"app_id":       appID,
-						"cp_name":      cp.CPName,
-						"cp_status":    cp.CPStatus,
-						"cp_url":       cp.CPURL,
-						"data_elements": cp.DataElements,
-					}
-					_, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", cpData)
-					if err != nil {
-						log.Error().Err(err).Msg("Failed to insert collection point")
-						render.Status(r, http.StatusInternalServerError)
-						render.PlainText(w, r, "Failed to insert collection point")
-						return
-					}
+					// // Insert new collection point
+					// cpData := bson.M{
+					// 	"_id":          cpID,
+					// 	"org_id":       orgID,
+					// 	"app_id":       appID,
+					// 	"cp_name":      cp.CPName,
+					// 	"cp_status":    cp.CPStatus,
+					// 	"cp_url":       cp.CPURL,
+					// 	"data_elements": cp.DataElements,
+					// }
+					// _, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", cpData)
+					// if err != nil {
+					// 	log.Error().Err(err).Msg("Failed to insert collection point")
+					// 	render.Status(r, http.StatusInternalServerError)
+					// 	render.PlainText(w, r, "Failed to insert collection point")
+					// 	return
+					// }
+
+					// Collection point not found
+					log.Debug().Msg("Collection point not found")
+					render.Status(r, http.StatusNotFound)
+					render.JSON(w, r, map[string]string{"message": "Collection point "+cp.Id+" not found. Please create it first."})
+					return
+
 				} else {
 					// Update existing collection point
 					update := bson.M{
@@ -417,7 +426,7 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 					if err != nil {
 						log.Error().Err(err).Msg("Failed to update collection point")
 						render.Status(r, http.StatusInternalServerError)
-						render.PlainText(w, r, "Failed to update collection point")
+						render.JSON(w, r, map[string]string{"message": "Failed to update collection point"})
 						return
 					}
 				}
@@ -425,24 +434,22 @@ func (h *Handler) PushYaml(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
-	// Write the updated YAML data back to the file
-	yamlFilename := fmt.Sprintf("%s_applications.yaml", orgID)
-	newYamlData, err := yaml.Marshal(&yamlData)
+	response := models.YamlUpdateResponse{
+		Message: "YAML file updated successfully",
+		YamlData: yamlData,
+	}
+
+	// Marshal the response
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal updated YAML data")
+		log.Error().Err(err).Msg("Failed to marshal response")
 		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to marshal updated YAML data")
+		render.JSON(w, r, map[string]string{"message": "Failed to marshal response"})
 		return
 	}
 
-	if err := os.WriteFile(yamlFilename, newYamlData, 0644); err != nil {
-		log.Error().Err(err).Msg("Failed to write updated YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to write updated YAML file")
-		return
-	}
-
-	render.JSON(w, r, map[string]string{"message": "YAML file updated successfully"})
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
 }
 
 
