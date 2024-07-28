@@ -46,8 +46,8 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate secret and token
-	secret := utils.GenerateUUID(16)
-	token := utils.GenerateUUID(32)
+	secret := utils.GenerateUUID(32)
+	token := utils.GenerateUUID(16)
 
 	// Extract client IP and headers
 	clientIP := utils.GetClientIP(r)
@@ -257,6 +257,14 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// loop through the data elements and loop through purposes and add purpose id
+	for i, dataElement := range data.DataElements {
+		for j, _ := range dataElement.Purposes {
+			purposeID := utils.GenerateUUID(8)
+			data.DataElements[i].Purposes[j].PurposeID = purposeID
+		}
+	}
+
 	// Generate default values for the collection point
 	collectionPointData := models.CollectionPointData{
 		CPName:    data.CollectionPointName,
@@ -265,6 +273,9 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		DataElements: data.DataElements,
 		
 	}
+
+	
+	
 
 	// Prepare the data to insert into MongoDB
 	collectionPointDatas := bson.M{
@@ -275,6 +286,9 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		"cp_url":       collectionPointData.CPURL,
 		"data_elements": collectionPointData.DataElements,
 	}
+
+	
+
 
 
 	// Insert data into collection_points

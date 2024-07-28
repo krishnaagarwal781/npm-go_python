@@ -106,7 +106,7 @@ type DataElement struct {
 }
 
 type Purpose struct {
-	// PurposeID          string `bson:"purpose_id" json:"purpose_id" yaml:"purpose_id"`
+	PurposeID          string `bson:"purpose_id" json:"purpose_id" yaml:"purpose_id"`
 	PurposeDescription string `bson:"purpose_description" json:"purpose_description" yaml:"purpose_description"`
 	PurposeLanguage    string `bson:"purpose_language" json:"purpose_language" yaml:"purpose_language"`
 }
