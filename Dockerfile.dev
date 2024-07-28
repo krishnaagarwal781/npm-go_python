@@ -1,17 +1,5 @@
-# Build stage
-FROM golang:latest AS builder
 
-# Copy the application code
-COPY . /concur-backend
-
-# Set the working directory
-WORKDIR /concur-backend
-
-# Build the Golang application
-RUN go build -o app .
-
-
-
+# Do `go build -o app .` first 
 
 # Production stage
 FROM debian
@@ -24,8 +12,11 @@ RUN mkdir /concur-backend
 # Create a directory for the log file
 RUN mkdir /concur-backend/logs
 
+
 # Copy the built binary from the build stage
-COPY --from=builder /concur-backend/app /concur-backend/app
+COPY ./app /concur-backend/app
+
+
 
 
 
@@ -33,6 +24,8 @@ COPY --from=builder /concur-backend/app /concur-backend/app
 # Set the working directory
 WORKDIR /concur-backend
 
+# Expose port
+EXPOSE 8080
 
 # Run the Golang application
 CMD ["./app"]

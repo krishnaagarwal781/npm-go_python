@@ -1,15 +1,19 @@
 package config
 
-import "go-python/models"
+import (
+	"go-python/models"
+	"os"
+)
 
 // LoadConfig loads configuration from environment variables.
 func LoadConfig() *models.Config {
 	// var cfg models.Config
 
 	cfg := models.Config{
-		MongoDBURI: "mongodb+srv://samwicky:samwicky@cluster0.gmkz4bw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
-		LogLevel: "debug",
-		Dbname: "Concur",
+		MongoDBURI: os.Getenv("CONCUR_DB_URI"),
+		LogLevel:  os.Getenv("LOG_LEVEL"),
+		Dbname: os.Getenv("CONCUR_DB_NAME"),
+		Port: os.Getenv("CONCUR_PORT"),
 	}
 
 	return &cfg

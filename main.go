@@ -35,9 +35,10 @@ func main() {
 	// Initialize routes
 	routes.InitializeRoutes(r, client, cfg)
 
+	
 	// Start server
-	log.Info().Msg("Starting server on :8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	log.Info().Msg("Starting server on :"+cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
 		log.Fatal().Err(err).Msg("Failed to start server")
 	}
 }

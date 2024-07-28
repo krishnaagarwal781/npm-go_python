@@ -2,3 +2,5 @@
 *__pycache__
 .env
 consent.md
+app
+docker-compose-dev.yaml

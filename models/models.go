@@ -6,7 +6,8 @@ import "time"
 type Config struct {
 	MongoDBURI string        
 	LogLevel   string
-	Dbname	 string        
+	Dbname	 string
+	Port string        
 }
 
 type OrganisationDetails struct {
