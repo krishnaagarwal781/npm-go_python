@@ -43,7 +43,7 @@ type ApplicationDetails struct {
 	AppType         string `json:"app_type" bson:"app_type"`
 	AppName         string `json:"app_name" bson:"app_name"`
 	AppStage        string `json:"app_stage" bson:"app_stage"`
-	ApplicationUser []string `json:"application_user" bson:"application_user"`
+	ApplicationUser string `json:"application_user" bson:"application_user"`
 	OrganisationID  string `json:"org_id" bson:"org_id"`
 	ApplicationID   string `json:"app_id" bson:"app_id"`
 	Registered_at	time.Time `json:"registered_at" bson:"registered_at"`
@@ -51,32 +51,40 @@ type ApplicationDetails struct {
 }
 
 
+type ApplicationResponse struct {
+	YamlData YamlTemplate `json:"yaml_data"`
+	Con_app_id string `json:"con_app_id"`
+	App_type string `json:"app_type"`
+	App_name string `json:"app_name"`
+	App_stage string `json:"app_stage"`
+	Application_user string `json:"application_user"`
+}
 
 
 // YamlTemplate represents the top-level structure in the YAML file
 type YamlTemplate struct {
-	Version      string        `yaml:"version"`
-	OrganisationID string `yaml:"organisation_id"`
-	Applications []Application `yaml:"applications"`
+	Version      string        `yaml:"version" json:"version"`
+	OrganisationID string `yaml:"organisation_id" json:"organisation_id"`
+	Applications []Application `yaml:"applications" json:"applications"`
 }
 
 
 // Application represents the application structure in the YAML file
 type Application struct {
-	ApplicationID    string   `yaml:"application_id"`
-	Type	string   `yaml:"type"`
-	Name   string   `yaml:"name"`
-	Stage  string   `yaml:"stage"`
-	ApplicationUser []string `yaml:"application_user"`
-	CollectionPoints []CollectionPointData `yaml:"collection_points_data"`
+	ApplicationID    string   `yaml:"application_id" json:"application_id"`
+	Type	string   `yaml:"type" json:"type"`
+	Name   string   `yaml:"name" json:"name"`
+	Stage  string   `yaml:"stage" json:"stage"`
+	ApplicationUser string `yaml:"application_user" json:"application_user"`
+	CollectionPoints []CollectionPointData `yaml:"collection_points_data" json:"collection_points_data"`
 }
 
 
 
 type CollectionPointData struct {
-	Id		 string         `bson:"_id,omitempty" json:"id" yaml:"cp_id"`
+	Id		 string         `bson:"_id,omitempty" json:"cp_id" yaml:"cp_id"`
 	CPName     string         `bson:"cp_name" json:"cp_name" yaml:"cp_name"`
-	CPStatus   string         `bson:"cp_status" json:"cp_status" yaml:"cp_status"`
+	CPStatus   string         `bson:"cp_status" json:"cp_status" yaml:"cp_status" default:"active"`
 	CPURL      string         `bson:"cp_url" json:"cp_url" yaml:"cp_url"`
 	DataElements []DataElement `bson:"data_elements" json:"data_elements" yaml:"data_elements"`
 }
@@ -88,11 +96,11 @@ type DataElement struct {
 	DataElementDescription      string     `bson:"data_element_description" json:"data_element_description" yaml:"data_element_description"`
 	DataOwner                   []string     `bson:"data_owner" json:"data_owner" yaml:"data_owner"`
 	LegalBasis                  string     `bson:"legal_basis" json:"legal_basis" yaml:"legal_basis"`
-	RetentionPeriod             string     `bson:"retention_period" json:"retention_period" yaml:"retention_period"`
+	RetentionPeriod             int32     `bson:"retention_period" json:"retention_period" yaml:"retention_period"`
 	CrossBorder                 bool       `bson:"cross_border" json:"cross_border" yaml:"cross_border"`
 	Sensitive                   bool       `bson:"sensitive" json:"sensitive" yaml:"sensitive"`
 	Encrypted                   bool       `bson:"encrypted" json:"encrypted" yaml:"encrypted"`
-	Expiry                      string     `bson:"expiry" json:"expiry" yaml:"expiry"`
+	Expiry                      int32     `bson:"expiry" json:"expiry" yaml:"expiry"`
 	
 	Purposes                    []Purpose  `bson:"purposes" json:"purposes" yaml:"purposes"`
 	Registered_at			   time.Time  `bson:"registered_at" json:"registered_at" yaml:"registered_at"`
@@ -118,7 +126,14 @@ type Purpose struct {
 
 type CollectionPointRequest struct {
 	OrgID string `json:"org_id"`
-	AppID string `json:"app_id"`
+	AppID string `json:"application_id"`
 	OrganisationKey string `json:"org_key"`
 	OrganisationSecret string `json:"org_secret"`
+	CollectionPointName string `json:"cp_name"`
+	DataElements []DataElement `json:"data_elements"`
+}
+
+type CollectionPointResponse struct {
+	Message string `json:"message"`
+	CollectionPointData CollectionPointData `json:"collection_point_data"`
 }

@@ -72,6 +72,9 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	insertDevResult,err:=database.InsertData(context.Background(), h.client, h.cfg.Dbname,"developer_details", developerData)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert developer details into mongodb.")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"message": "Failed to insert developer details into mongodb."})
+		return
 	}
 
 
@@ -89,6 +92,9 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	insertOrgResult,err:=database.InsertData(context.Background(), h.client, h.cfg.Dbname,"organisation_details", orgData)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert organisation details into mongodb.")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"message": "Failed to insert organisation details into mongodb."})
+		return
 	}
 
 	// update the developer details with the organisation id
@@ -101,26 +107,18 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	_,err = database.UpdateData(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter, update)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to update developer details")
-	}
-
-	// Write the org_id, org_key and org_secret to a .env file
-	envContent := fmt.Sprintf("ORG_ID=%s\nORG_KEY=%s\nORG_SECRET=%s\n", utils.ConvertObjectIDToString(insertOrgResult.InsertedID), token, secret)
-	err = os.WriteFile(".env", []byte(envContent), 0644)
-	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to write .env file")
-		log.Error().Err(err).Msg("Error writing .env file:")
+		render.JSON(w, r, map[string]string{"message": "Failed to update developer details"})
 		return
 	}
 
 
-	
 
 	// Prepare the response
 	response := map[string]string{
-		"org_id":   utils.ConvertObjectIDToString(insertOrgResult.InsertedID),
-		"org_secret": secret,
-		"org_key":  token,
+		"con_org_id":   utils.ConvertObjectIDToString(insertOrgResult.InsertedID),
+		"con_org_key":  token,
+		"con_org_secret": secret,
 	}
 	render.JSON(w, r, response)
 }
@@ -146,19 +144,14 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 
 	// verify the organisation id, key and secret
 	filter:=bson.M{"organisation_id": orgID, "org_key": orgKey, "org_secret": orgSecret}
-	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to find organisation")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to verify organisation")
-		return
-	}
-	if count == 0 {
-		log.Debug().Msg("Invalid org_key or org_secret")
+	isAuthorised,err:=database.IsAuthorised(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
+	if err != nil || !isAuthorised {
+		log.Error().Err(err).Msg("Failed to verify organisation")
 		render.Status(r, http.StatusUnauthorized)
-		render.PlainText(w, r, "Invalid org_key or org_secret")
+		render.JSON(w, r, map[string]string{"message": "Failed to verify organisation"})
 		return
 	}
+
 
 	log.Debug().Msgf("Creating application for org_id: %s", orgID)
 
@@ -182,7 +175,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert application details into mongodb.")
 		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to insert application details into mongodb.")
+		render.JSON(w, r, map[string]string{"message": "Failed to insert application details into mongodb."})
 		return
 	}
 
@@ -190,6 +183,7 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	// Generate YAML template
 	yamlTemplate := models.YamlTemplate{
 		Version: "1.0",
+		OrganisationID: orgID,
 		Applications: []models.Application{
 			{
 				ApplicationID:    appID,
@@ -202,32 +196,31 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Marshal the YAML data
-	yamlData, err := yaml.Marshal(&yamlTemplate)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal YAML data")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to generate YAML template")
-		return
-	}
+	
 
-	// Write the YAML data to a file
-	yamlFilename := fmt.Sprintf("%s_applications.yaml", orgID)
-	err = os.WriteFile( yamlFilename, yamlData, 0644)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to write YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to write YAML file")
-		return
-	}
+	
 
 	// Prepare the response
-	response := map[string]string{
-		"app_id": appID,
-		"app_type": data.AppType,
+	response := models.ApplicationResponse{
+		YamlData: yamlTemplate,
+		Con_app_id: appID,
+		App_type: data.AppType,
+		App_name: data.AppName,
+		App_stage: data.AppStage,
+		Application_user: data.ApplicationUser,
 	}
 
-	render.JSON(w, r, response)
+	// Marshal the response
+	jsonResponse, err := json.Marshal(response)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal response")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"message": "Failed to marshal response"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
 }
 
 
@@ -256,46 +249,21 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 
 	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", data.OrgID, data.OrganisationKey, data.OrganisationSecret)
 
-	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to find organisation")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to verify organisation")
-		return
-	}
-	if count == 0 {
-		log.Debug().Msg("Invalid org_key or org_secret")
+	isAuthorised, err:=database.IsAuthorised(context.Background(), h.client, h.cfg.Dbname, "developer_details", filter)
+	if err != nil || !isAuthorised {
+		log.Error().Err(err).Msg("Failed to verify organisation")
 		render.Status(r, http.StatusUnauthorized)
-		render.PlainText(w, r, "Invalid org_key or org_secret")
+		render.JSON(w, r, map[string]string{"message": "Failed to verify organisation"})
 		return
 	}
 
 	// Generate default values for the collection point
 	collectionPointData := models.CollectionPointData{
-		CPName:    "Default Collection Point",
+		CPName:    data.CollectionPointName,
 		CPStatus:  "active",
 		CPURL:     "http://default-url.com",
-		DataElements: []models.DataElement{
-			{
-				DataElement:                 "default_element",
-				DataElementTitle:            "Default Element Title",
-				DataElementDescription:      "Default Element Description",
-				DataOwner:                   []string{"Entity 1", "Entity 2"},
-				LegalBasis:                  "Default Legal Basis",
-				RetentionPeriod:             "1 year",
-				CrossBorder:                 false,
-				Sensitive:                   false,
-				Encrypted:                   true,
-				Expiry:                      "Never",
-				DataElementCollectionStatus: "active",
-				Purposes: []models.Purpose{
-					{
-						PurposeDescription: "Default Purpose Description",
-						PurposeLanguage:    "EN",
-					},
-				},
-			},
-		},
+		DataElements: data.DataElements,
+		
 	}
 
 	// Insert data into collection_points
@@ -303,63 +271,32 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert collection point details into mongodb.")
 		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to insert collection point details into mongodb.")
+		render.JSON(w, r, map[string]string{"message": "Failed to insert collection point details into mongodb."})
 		return
 	}
 
 	// Convert the cpID to a string
 	cpID := utils.ConvertObjectIDToString(cpResult.InsertedID)
-	
-
-	// Read the existing YAML file
-	yamlFilename := fmt.Sprintf("%s_applications.yaml", data.OrgID)
-	yamlFile, err := os.ReadFile(yamlFilename)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to read YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to read YAML file")
-		return
-	}
-
-	// Unmarshal the YAML data
-	var yamlData models.YamlTemplate
-	if err := yaml.Unmarshal(yamlFile, &yamlData); err != nil {
-		log.Error().Err(err).Msg("Failed to unmarshal YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to unmarshal YAML file")
-		return
-	}
-
-	
-	// Update the collection point ID
 	collectionPointData.Id = cpID
+	
+	message := fmt.Sprintf("Collection point with %s created successfully", cpID)
 
-	// Update the YAML data
-	for i := range yamlData.Applications {
-		if yamlData.Applications[i].ApplicationID == data.AppID {
-			yamlData.Applications[i].CollectionPoints = append(yamlData.Applications[i].CollectionPoints, collectionPointData) 
-			break
-		}
+	response := models.CollectionPointResponse{
+		Message: message,
+		CollectionPointData: collectionPointData,
 	}
 
-	// Write the updated YAML data back to the file
-	newYamlData, err := yaml.Marshal(&yamlData)
+	// Marshal the response
+	jsonResponse, err := json.Marshal(response)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal updated YAML data")
+		log.Error().Err(err).Msg("Failed to marshal response")
 		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to marshal updated YAML data")
+		render.JSON(w, r, map[string]string{"message": "Failed to marshal response"})
 		return
 	}
 
-	// Write the updated YAML data back to the file
-	if err := os.WriteFile(yamlFilename, newYamlData, 0644); err != nil {
-		log.Error().Err(err).Msg("Failed to write updated YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to write updated YAML file")
-		return
-	}
-
-	render.JSON(w, r, map[string]string{"message": "Collection point created successfully"})
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonResponse)
 
 }
 

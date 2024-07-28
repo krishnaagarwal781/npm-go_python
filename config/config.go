@@ -7,7 +7,7 @@ func LoadConfig() *models.Config {
 	// var cfg models.Config
 
 	cfg := models.Config{
-		MongoDBURI: "",
+		MongoDBURI: "mongodb+srv://samwicky:samwicky@cluster0.gmkz4bw.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
 		LogLevel: "debug",
 		Dbname: "Concur",
 	}

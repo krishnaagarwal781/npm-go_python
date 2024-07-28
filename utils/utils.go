@@ -9,8 +9,13 @@ import (
 )
 
 func GenerateUUID(len int) string {
+	// @TODO : fix the length of the UUID
 	// Generate a new UUID of the specified length.
 	uuid := uuid.New().String()
+
+	// Remove the hyphens from the UUID.
+	uuid = strings.Replace(uuid, "-", "", -1)
+
 	return uuid[:len]
 
 }

@@ -4,9 +4,10 @@ import (
 	"context"
 	"time"
 
+	
+	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"github.com/rs/zerolog/log"
 )
 
 
@@ -49,6 +50,20 @@ func InsertData(ctx context.Context, client *mongo.Client, database_name string,
 
 	return result,nil
 }
+
+func IsAuthorised(ctx context.Context, client *mongo.Client, database_name string, collection_name string, filter interface{}) (bool,error) {
+	count,err := CountDocuments(context.Background(), client, database_name, collection_name, filter)
+	if err != nil {
+		return false,err
+	}
+	if count == 0 {
+		log.Debug().Msg("Invalid org_key or org_secret")
+		return false,err
+	}
+	return true,nil
+}
+
+
 
 func CountDocuments(ctx context.Context, client *mongo.Client, database_name string, collection_name string, filter interface{}) (int64,error) {
 	collection := client.Database(database_name).Collection(collection_name)
@@ -94,3 +109,4 @@ func DeleteOne(ctx context.Context, client *mongo.Client, databaseName string, c
 	}
 	return result, nil
 }
+
