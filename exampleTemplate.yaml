@@ -1,0 +1,30 @@
+version: "1.0"
+organisation_id: "66a617979bbc3070a4e682db"
+applications:
+  - application_id: "ce33e189"
+    type: "web"
+    name: "My Application"
+    stage: "production"
+    application_user: "India"
+    collection_points_data:
+      - cp_id: "66a61f30ff5d1a6606647c72"
+        cp_name: "CollectionPoint 1  updated"
+        cp_status: "active"
+        cp_url: "https://example.com/collectionpoint1"
+        data_elements:
+          - data_element: "data-element-1"
+            data_element_collection_status: "active"
+            data_element_title: "Data Element 1 Title"
+            data_element_description: "Description of Data Element 1"
+            data_owner: 
+            legal_basis: 
+            retention_period: 
+            cross_border: false
+            sensitive: false
+            encrypted: true
+            expiry: 
+            purposes:
+              - purpose_description: "Purpose for data collection"
+                purpose_language: "en"
+          
+     

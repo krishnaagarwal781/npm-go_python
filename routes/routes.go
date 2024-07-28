@@ -21,7 +21,7 @@ func InitializeRoutes(r *chi.Mux, client *mongo.Client, cfg *models.Config) {
 		r.Post("/create-collection-point", h.CreateCollectionPoint)
 		r.Post("/push-yaml", h.PushYaml)
 		r.Delete("/delete-collection-point/{collection_point_id}", h.DeleteCollectionPoint)
-		r.Get("/get-collection-points", h.GetCollectionPoints)
+		r.Get("/get-collection-points/{app_id}", h.GetCollectionPoints)
 	})
 	
 

@@ -141,3 +141,7 @@ type YamlUpdateResponse struct {
 	Message string `json:"message"`
 	YamlData YamlTemplate `json:"yaml_data"`
 }
+
+type GetCollectionPointsResponse struct {
+	CollectionPoints []CollectionPointData `json:"con_collection_points"`
+}

@@ -8,7 +8,7 @@ import (
 	"go-python/models"
 	"go-python/utils"
 	"net/http"
-	"os"
+	
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -266,8 +266,19 @@ func (h *Handler) CreateCollectionPoint(w http.ResponseWriter, r *http.Request) 
 		
 	}
 
+	// Prepare the data to insert into MongoDB
+	collectionPointDatas := bson.M{
+		"org_id":       data.OrgID,
+		"app_id":       data.AppID,
+		"cp_name":      collectionPointData.CPName,
+		"cp_status":    collectionPointData.CPStatus,
+		"cp_url":       collectionPointData.CPURL,
+		"data_elements": collectionPointData.DataElements,
+	}
+
+
 	// Insert data into collection_points
-	cpResult, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", collectionPointData)
+	cpResult, err := database.InsertData(context.Background(), h.client, h.cfg.Dbname, "collection_points", collectionPointDatas)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to insert collection point details into mongodb.")
 		render.Status(r, http.StatusInternalServerError)
@@ -475,17 +486,11 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 
 	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
 
-	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to find organisation")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to verify organisation")
-		return
-	}
-	if count == 0 {
-		log.Debug().Msg("Invalid org_key or org_secret")
+	isAuthorised,err:=database.IsAuthorised(context.Background(), h.client, h.cfg.Dbname, "developer_details", filter)
+	if err != nil || !isAuthorised {
+		log.Error().Err(err).Msg("Failed to verify organisation")
 		render.Status(r, http.StatusUnauthorized)
-		render.PlainText(w, r, "Invalid org_key or org_secret")
+		render.JSON(w, r, map[string]string{"message": "Failed to verify organisation"})
 		return
 	}
 
@@ -504,61 +509,12 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to delete collection point")
 		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to delete collection point")
+		render.JSON(w, r, map[string]string{"message": "Failed to delete collection point"})
 		return
 	}
 	if deleteResult.DeletedCount == 0 {
 		render.Status(r, http.StatusNotFound)
-		render.PlainText(w, r, "Collection point not found")
-		return
-	}
-
-	// Read the YAML file
-	yamlFilename := fmt.Sprintf("%s_applications.yaml", orgID)
-	yamlFile, err := os.ReadFile(yamlFilename)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to read YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to read YAML file")
-		return
-	}
-
-	var yamlData models.YamlTemplate
-	err = yaml.Unmarshal(yamlFile, &yamlData)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to unmarshal YAML file")
-		render.Status(r, http.StatusBadRequest)
-		render.PlainText(w, r, "Failed to unmarshal YAML file")
-		return
-	}
-
-	// Remove the collection point from the YAML data
-	for i := range yamlData.Applications {
-		// Iterate backward through the collection points of each application
-		for j := len(yamlData.Applications[i].CollectionPoints) - 1; j >= 0; j-- {
-			if yamlData.Applications[i].CollectionPoints[j].Id == collectionPointID {
-				// Delete collection point
-				yamlData.Applications[i].CollectionPoints = append(
-					yamlData.Applications[i].CollectionPoints[:j],
-					yamlData.Applications[i].CollectionPoints[j+1:]...,
-				)
-			}
-		}
-	}
-
-	// Write the updated YAML data back to the file
-	newYamlData, err := yaml.Marshal(&yamlData)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal updated YAML data")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to marshal updated YAML data")
-		return
-	}
-
-	if err := os.WriteFile(yamlFilename, newYamlData, 0644); err != nil {
-		log.Error().Err(err).Msg("Failed to write updated YAML file")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to write updated YAML file")
+		render.JSON(w, r, map[string]string{"message": "Collection point not found"})
 		return
 	}
 
@@ -574,7 +530,7 @@ func (h *Handler) GetCollectionPoints(w http.ResponseWriter, r *http.Request) {
 	orgID := r.URL.Query().Get("org_id")
 	orgKey := r.URL.Query().Get("org_key")
 	orgSecret := r.URL.Query().Get("org_secret")
-	applicationID := r.URL.Query().Get("application_id")
+	applicationID := chi.URLParam(r, "app_id")
 
 	// Verify org_key and org_secret
 	filter := bson.M{
@@ -585,17 +541,11 @@ func (h *Handler) GetCollectionPoints(w http.ResponseWriter, r *http.Request) {
 
 	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
 
-	count,err := database.CountDocuments(context.Background(), h.client, h.cfg.Dbname,"developer_details", filter)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to find organisation")
-		render.Status(r, http.StatusInternalServerError)
-		render.PlainText(w, r, "Failed to verify organisation")
-		return
-	}
-	if count == 0 {
-		log.Debug().Msg("Invalid org_key or org_secret")
+	isAuthorised,err:=database.IsAuthorised(context.Background(), h.client, h.cfg.Dbname, "developer_details", filter)
+	if err != nil || !isAuthorised {
+		log.Error().Err(err).Msg("Failed to verify organisation")
 		render.Status(r, http.StatusUnauthorized)
-		render.PlainText(w, r, "Invalid org_key or org_secret")
+		render.JSON(w, r, map[string]string{"message": "Failed to verify organisation"})
 		return
 	}
 
@@ -621,11 +571,15 @@ func (h *Handler) GetCollectionPoints(w http.ResponseWriter, r *http.Request) {
 
 	if len(collectionPoints) == 0 {
 		render.Status(r, http.StatusNotFound)
-		render.PlainText(w, r, "No collection points found")
+		render.JSON(w, r, map[string]string{"message": "No collection points found"})
 		return
 	}
 
-	
+	response := models.GetCollectionPointsResponse{
+		CollectionPoints: collectionPoints,
+	}
 
-	render.JSON(w, r, map[string]interface{}{"collection_points": collectionPoints})
+	// set the response content type
+	w.Header().Set("Content-Type", "application/json")
+	render.JSON(w, r, response)
 }
