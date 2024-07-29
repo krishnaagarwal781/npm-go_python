@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 import secrets
 import datetime
-from typing import List
+from typing import List, Dict
 import yaml
 
 
@@ -71,19 +71,22 @@ class ApplicationDetailsRequest(BaseModel):
     org_secret: str
     application_details: ApplicationDetailsExtended
 
-
-class Purpose(BaseModel):
+class ConsentScopeItem(BaseModel):
+    data_element_name: str
     purpose_id: str
-    consent: bool
-
+    consent_status: bool
+    shared: bool
+    data_processor_id: List[str] = []
+    cross_border: bool
 
 class ConsentPreferenceRequest(BaseModel):
     org_id: str
     org_key: str
     org_secret: str
-    application_id: str
-    collection_point_id: str
-    purposes: List[Purpose]
+    cp_id: str
+    dp_id: str
+    dp_email_hash: str
+    consent_scope: List[ConsentScopeItem]
 
 
 # MongoDB connection
@@ -95,6 +98,7 @@ developer_details_collection = db["developer_details"]
 organisation_collection = db["organisation_details"]
 application_collection = db["org_applications"]
 collection_point_collection = db["collection_points"]
+consent_preferences_collection = db["consent_preferences"]
 
 # FastAPI app setup
 app = FastAPI()
@@ -665,6 +669,7 @@ async def get_notice_info(
     return {"notice_info": notice_info}
 
 
+
 @app.post("/post-consent-preference")
 async def post_consent_preference(data: ConsentPreferenceRequest):
     # Validate organisation
@@ -678,54 +683,94 @@ async def post_consent_preference(data: ConsentPreferenceRequest):
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
-    # Validate application
-    application = application_collection.find_one(
-        {"org_id": data.org_id, "app_id": data.application_id}
-    )
-    if not application:
-        raise HTTPException(status_code=404, detail="Application not found")
-
-    # Validate collection point
+    # Validate collection point and fetch data elements
     collection_point = collection_point_collection.find_one(
-        {"_id": ObjectId(data.collection_point_id), "org_id": data.org_id}
+        {"_id": ObjectId(data.cp_id), "org_id": data.org_id}
     )
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
 
-    # Process each purpose
-    updated_purposes = []
-    for purpose in data.purposes:
-        purpose_id = purpose.purpose_id
-        consent = purpose.consent
+    cp_name = collection_point.get("cp_name", "")
+    data_elements = collection_point.get("data_elements", [])
 
-        # Validate purpose
-        if not purpose_id or consent is None:
-            raise HTTPException(
-                status_code=400, detail="Purpose ID and consent status are required"
-            )
+    # Validate that each data_element_name in consent_scope exists in data_elements
+    for scope_item in data.consent_scope:
+        if not any(element['data_element'] == scope_item.data_element_name for element in data_elements):
+            raise HTTPException(status_code=400, detail=f"Invalid data_element_name: {scope_item.data_element_name}")
 
-        purpose_update_result = collection_point_collection.update_one(
-            {
-                "_id": ObjectId(data.collection_point_id),
-                "data_elements.purposes.purpose_id": purpose_id,
+    # Build consent document
+    consent_document = {
+        "context": "https://consent.foundation/artifact/v1",
+        "type": cp_name,
+        "agreement_hash_id": "",
+        "agreement_version": "",
+        "linked_agreement_hash": "",
+        "data_principal": {
+            "dp_df_id": "",
+            "dp_public_key": "",
+            "dp_residency": "",
+            "dp_email": "NULL [Encrypted]",
+            "dp_verification": "",
+            "dp_child": "",
+            "dp_attorney": {
+                "dp_df_id": "",
+                "dp_public_key": "",
+                "dp_email": "NULL [Encrypted]",
             },
-            {"$set": {"data_elements.$[elem].purposes.$[purp].consent": consent}},
-            array_filters=[
-                {"elem.data_element": {"$exists": True}},
-                {"purp.purpose_id": purpose_id},
-            ],
-        )
+        },
+        "data_fiduciary": {
+            "df_id": "",
+            "agreement_date": "",
+            "date_of_consent": datetime.datetime.utcnow().isoformat(),
+            "consent_status": "active",
+            "revocation_date": None,
+        },
+        "data_principal_rights": {
+            "right_to_access": True,
+            "right_to_rectify": True,
+            "right_to_erase": True,
+            "right_to_restrict_processing": True,
+            "right_to_data_portability": True,
+        },
+        "consent_scope": [
+            {
+                "data_element_name": scope_item.data_element_name,
+                "purpose_id": scope_item.purpose_id,
+                "consent_status": scope_item.consent_status,
+                "shared": scope_item.shared,
+                "data_processor_id": scope_item.data_processor_id,
+                "cross_border": scope_item.cross_border,
+                "consent_timestamp": datetime.datetime.utcnow().isoformat(),
+                "expiry_date": datetime.datetime.utcnow().isoformat(),
+            }
+            for scope_item in data.consent_scope
+        ],
+        "dp_id": data.dp_id,
+        "cp_id": data.cp_id,
+    }
 
-        if purpose_update_result.modified_count == 0:
-            raise HTTPException(
-                status_code=500, detail=f"Failed to update purpose {purpose_id}"
-            )
-
-        updated_purposes.append(purpose_id)
-
-    return JSONResponse(
-        content={
-            "message": "Consent preferences updated successfully",
-            "updated_purposes": updated_purposes,
-        }
+    # Insert or update the consent preference in MongoDB
+    result = consent_preferences_collection.find_one_and_update(
+        {"dp_id": data.dp_id, "cp_id": data.cp_id},
+        {"$set": consent_document},
+        upsert=True,
+        return_document=True
     )
+
+    if result:
+        return JSONResponse(
+            content={
+                "message": "Consent preferences updated successfully",
+                "agreement_id": str(result["_id"]),
+            }
+        )
+    else:
+        inserted_id = str(
+            consent_preferences_collection.insert_one(consent_document).inserted_id
+        )
+        return JSONResponse(
+            content={
+                "message": "Consent preferences created successfully",
+                "agreement_id": inserted_id,
+            }
+        )
