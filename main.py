@@ -14,9 +14,9 @@ import yaml
 class DeveloperDetails(BaseModel):
     developer_email: str
     developer_website: str
-    developer_city: str
     developer_mobile: str
     organisation_name: str
+    contact_consent: bool
 
 
 class ApplicationDetails(BaseModel):
