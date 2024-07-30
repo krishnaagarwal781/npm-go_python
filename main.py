@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, File
+from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, File, Header
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,7 +6,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 import secrets
 import datetime
-from typing import List, Dict
+from typing import List, Dict, Optional
 import yaml
 
 
@@ -43,10 +43,6 @@ class DataElement(BaseModel):
 
 
 class CollectionPointRequest(BaseModel):
-    org_id: str
-    org_key: str
-    org_secret: str
-    application_id: str
     cp_name: str
     data_elements: List[DataElement]
 
@@ -71,6 +67,7 @@ class ApplicationDetailsRequest(BaseModel):
     org_secret: str
     application_details: ApplicationDetailsExtended
 
+
 class ConsentScopeItem(BaseModel):
     data_element_name: str
     purpose_id: str
@@ -78,6 +75,7 @@ class ConsentScopeItem(BaseModel):
     shared: bool
     data_processor_id: List[str] = []
     cross_border: bool
+
 
 class ConsentPreferenceRequest(BaseModel):
     org_id: str
@@ -165,9 +163,9 @@ async def package_register(request: Request, data: DeveloperDetails):
 @app.post("/create-application")
 async def create_application(
     data: ApplicationDetails,
-    org_id: str,
-    org_key: str,
-    org_secret: str,
+    org_key: str = Header(...),
+    org_secret: str = Header(...),
+    org_id: str = Header(...),
 ):
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
@@ -237,20 +235,25 @@ async def create_application(
 
 
 @app.post("/create-collection-point")
-async def create_collection_point(data: CollectionPointRequest):
+async def create_collection_point(
+    data: CollectionPointRequest,
+    org_id: str = Header(...),
+    org_key: str = Header(...),
+    org_secret: str = Header(...),
+    application_id: str = Header(...),
+):
     organisation = developer_details_collection.find_one(
         {
-            "organisation_id": data.org_id,
-            "org_key": data.org_key,
-            "org_secret": data.org_secret,
+            "organisation_id": org_id,
+            "org_key": org_key,
+            "org_secret": org_secret,
         }
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
-
     collection_point_data = {
-        "org_id": data.org_id,
-        "application_id": data.application_id,
+        "org_id": org_id,
+        "application_id": application_id,
         "cp_name": data.cp_name,
         "cp_status": "active",
         "data_elements": [
@@ -280,19 +283,25 @@ async def create_collection_point(data: CollectionPointRequest):
         "registered_at": datetime.datetime.utcnow(),
     }
 
-    cp_result = collection_point_collection.insert_one(collection_point_data)
-    if not cp_result.acknowledged:
+    try:
+        cp_result = collection_point_collection.insert_one(collection_point_data)
+    except Exception as e:
         raise HTTPException(
-            status_code=500, detail="Failed to insert collection point details"
+            status_code=500,
+            detail=f"Failed to insert collection point details: {str(e)}",
         )
 
     cp_id = str(cp_result.inserted_id)
-
     cp_url = f"demo.api.com/{cp_id}"
 
-    collection_point_collection.update_one(
-        {"_id": cp_result.inserted_id}, {"$set": {"cp_url": cp_url}}
-    )
+    try:
+        collection_point_collection.update_one(
+            {"_id": cp_result.inserted_id}, {"$set": {"cp_url": cp_url}}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update collection point URL: {str(e)}"
+        )
 
     response_data = {
         "cp_id": cp_id,
@@ -333,11 +342,12 @@ async def create_collection_point(data: CollectionPointRequest):
 @app.post("/push-yaml")
 async def push_yaml(
     yaml_file: UploadFile = File(...),
-    org_id: str = Form(...),
-    app_id: str = Form(...),
-    org_key: str = Form(...),
-    org_secret: str = Form(...),
+    org_id: str = Header(...),
+    app_id: str = Header(...),
+    org_key: str = Header(...),
+    org_secret: str = Header(...),
 ):
+    # Validate the organization credentials
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
@@ -390,9 +400,12 @@ async def push_yaml(
     )
 
 
-@app.delete("/delete-collection-point/{collection_point_id}")
+@app.delete("/delete-collection-point")
 async def delete_collection_point(
-    collection_point_id: str, org_id: str, org_key: str, org_secret: str
+    collection_point_id: str = Header(...),
+    org_id: str = Header(...),
+    org_key: str = Header(...),
+    org_secret: str = Header(...),
 ):
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
@@ -409,9 +422,12 @@ async def delete_collection_point(
     return JSONResponse(content={"message": "Collection point deleted successfully"})
 
 
-@app.get("/get-collection-points/{app_id}")
+@app.get("/get-collection-points")
 async def get_collection_points(
-    app_id: str, org_id: str, org_key: str, org_secret: str
+    app_id: str = Header(...),
+    org_id: str = Header(...),
+    org_key: str = Header(...),
+    org_secret: str = Header(...),
 ):
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
@@ -439,9 +455,13 @@ async def get_collection_points(
     return JSONResponse(content={"con_collection_points": collection_points})
 
 
-@app.get("/get-notice-info/{cp_id}")
+@app.get("/get-notice-info")
 async def get_notice_info(
-    cp_id: str, app_id: str, org_id: str, org_key: str, org_secret: str
+    cp_id: str = Header(...),
+    app_id: str = Header(...),
+    org_id: str = Header(...),
+    org_key: str = Header(...),
+    org_secret: str = Header(...),
 ):
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
@@ -669,7 +689,6 @@ async def get_notice_info(
     return {"notice_info": notice_info}
 
 
-
 @app.post("/post-consent-preference")
 async def post_consent_preference(data: ConsentPreferenceRequest):
     # Validate organisation
@@ -695,8 +714,14 @@ async def post_consent_preference(data: ConsentPreferenceRequest):
 
     # Validate that each data_element_name in consent_scope exists in data_elements
     for scope_item in data.consent_scope:
-        if not any(element['data_element'] == scope_item.data_element_name for element in data_elements):
-            raise HTTPException(status_code=400, detail=f"Invalid data_element_name: {scope_item.data_element_name}")
+        if not any(
+            element["data_element"] == scope_item.data_element_name
+            for element in data_elements
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid data_element_name: {scope_item.data_element_name}",
+            )
 
     # Build consent document
     consent_document = {
@@ -754,7 +779,7 @@ async def post_consent_preference(data: ConsentPreferenceRequest):
         {"dp_id": data.dp_id, "cp_id": data.cp_id},
         {"$set": consent_document},
         upsert=True,
-        return_document=True
+        return_document=True,
     )
 
     if result:
