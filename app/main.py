@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.routes import (
     register_user,
     manage_collection_point,
@@ -8,6 +10,15 @@ from app.routes import (
 )
 
 app = FastAPI()
+
+# Initialize the Limiter
+limiter = Limiter(key_func=get_remote_address)
+
+# Apply rate limiting to the entire app
+@app.get("/")
+@limiter.limit("5/minute")
+async def read_root(request: Request):
+    return {"message": "Welcome bhidu"}
 
 app.include_router(register_user.registerUser)
 app.include_router(manage_collection_point.collectionRouter)
@@ -21,8 +32,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome bhidu"}

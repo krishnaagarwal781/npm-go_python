@@ -9,11 +9,15 @@ from app.config.db import (
 from bson import ObjectId
 from datetime import datetime
 import secrets
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 registerUser = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @registerUser.post("/package-register", tags=["Package register & application"])
+@limiter.limit("2/minute")
 async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
     client_ip = request.client.host
@@ -60,7 +64,9 @@ async def package_register(request: Request, data: DeveloperDetails):
 
 
 @registerUser.post("/create-application", tags=["Package register & application"])
+@limiter.limit("6/minute")
 async def create_application(
+    request:Request,
     data: ApplicationDetails,
     org_key: str = Header(...),
     org_secret: str = Header(...),

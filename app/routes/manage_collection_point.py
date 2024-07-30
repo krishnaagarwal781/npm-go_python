@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Header, UploadFile, File
+from fastapi import APIRouter, HTTPException, Header, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 import datetime
@@ -6,12 +6,17 @@ import secrets
 import yaml
 from app.config.db import collection_point_collection, developer_details_collection
 from app.models.models import CollectionPointRequest
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 collectionRouter = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @collectionRouter.post("/create-collection-point", tags=["Collection Point Management"])
+@limiter.limit("5/minute")
 async def create_collection_point(
+    request: Request,
     data: CollectionPointRequest,
     org_id: str = Header(...),
     org_key: str = Header(...),
@@ -116,7 +121,9 @@ async def create_collection_point(
 
 
 @collectionRouter.post("/push-yaml", tags=["Collection Point Management"])
+@limiter.limit("5/minute")
 async def push_yaml(
+    request:Request,
     yaml_file: UploadFile = File(...),
     org_id: str = Header(...),
     app_id: str = Header(...),
@@ -179,7 +186,9 @@ async def push_yaml(
 @collectionRouter.delete(
     "/delete-collection-point", tags=["Collection Point Management"]
 )
+@limiter.limit("5/minute")
 async def delete_collection_point(
+    request:Request,
     collection_point_id: str = Header(...),
     org_id: str = Header(...),
     org_key: str = Header(...),
@@ -201,7 +210,9 @@ async def delete_collection_point(
 
 
 @collectionRouter.get("/get-collection-points", tags=["Collection Point Management"])
+@limiter.limit("5/minute")
 async def get_collection_points(
+    request:Request,
     app_id: str = Header(...),
     org_id: str = Header(...),
     org_key: str = Header(...),

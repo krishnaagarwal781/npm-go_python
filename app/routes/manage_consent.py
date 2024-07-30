@@ -3,6 +3,7 @@ from fastapi import (
     HTTPException,
     Header,
     APIRouter,
+    Request
 )
 from fastapi.responses import JSONResponse
 from bson import ObjectId
@@ -13,12 +14,16 @@ from app.config.db import (
     developer_details_collection,
 )
 from app.models.models import ConsentPreferenceRequest
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 consentRouter = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
-@consentRouter.post("/post-consent-preference",tags=["Consent Preference"])
-async def post_consent_preference(data: ConsentPreferenceRequest):
+@consentRouter.post("/post-consent-preference", tags=["Consent Preference"])
+@limiter.limit("5/minute")
+async def post_consent_preference(request: Request, data: ConsentPreferenceRequest):
     # Validate organisation
     organisation = developer_details_collection.find_one(
         {
