@@ -1,8 +1,8 @@
 artifact:
   context: "https://consent.foundation/artifact/v1"
-  type: "Customer Onboarding Form"
+  cp_name: "Customer Onboarding Form"
   agreement_hash_id: "1ca35897540ec7ae7294a8cacd11caf2c09f95f026c925c6ce4e4c29b20e3c41"
-  agreement_version: "2.0"
+  agreement_version: "1.0"
   linked_agreement_hash: "d4828c7252da8b626a40ffdbbec74c36b74d8f80c78df86e43d53fb5f3f366f4"
   data_principal:
     dp_df_id: "d74bed43-6ee3-4cdc-a5cb-2b6b8f1732c4"
