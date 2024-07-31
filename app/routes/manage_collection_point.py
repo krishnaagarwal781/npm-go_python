@@ -6,11 +6,14 @@ import secrets
 import yaml
 from app.config.db import collection_point_collection, developer_details_collection
 from app.models.models import CollectionPointRequest
-from slowapi import Limiter
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from limits.storage import RedisStorage
 
 collectionRouter = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
+redis_url = "redis://localhost:6379/0"  # Adjust the Redis URL as needed
+limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
 
 @collectionRouter.post("/create-collection-point", tags=["Collection Point Management"])
@@ -114,16 +117,18 @@ async def create_collection_point(
         ],
     }
 
-    return {
-        "message": f"Collection point with id {cp_id} created successfully",
-        "collection_point_data": response_data,
-    }
+    return JSONResponse(
+        content={
+            "message": f"Collection point with id {cp_id} created successfully",
+            "collection_point_data": response_data,
+        }
+    )
 
 
 @collectionRouter.post("/push-yaml", tags=["Collection Point Management"])
 @limiter.limit("5/minute")
 async def push_yaml(
-    request:Request,
+    request: Request,
     yaml_file: UploadFile = File(...),
     org_id: str = Header(...),
     app_id: str = Header(...),
@@ -155,10 +160,19 @@ async def push_yaml(
                             {"_id": ObjectId(cp_id)},
                             {
                                 "$set": {
-                                    "cp_name": cp_details["cp_name"],
-                                    "cp_status": cp_details["cp_status"],
-                                    "cp_url": cp_details["cp_url"],
-                                    "data_elements": cp_details["data_elements"],
+                                    "cp_name": cp_details.get(
+                                        "cp_name", existing_cp.get("cp_name")
+                                    ),
+                                    "cp_status": cp_details.get(
+                                        "cp_status", existing_cp.get("cp_status")
+                                    ),
+                                    "cp_url": cp_details.get(
+                                        "cp_url", existing_cp.get("cp_url")
+                                    ),
+                                    "data_elements": cp_details.get(
+                                        "data_elements",
+                                        existing_cp.get("data_elements"),
+                                    ),
                                 }
                             },
                         )
@@ -188,7 +202,7 @@ async def push_yaml(
 )
 @limiter.limit("5/minute")
 async def delete_collection_point(
-    request:Request,
+    request: Request,
     collection_point_id: str = Header(...),
     org_id: str = Header(...),
     org_key: str = Header(...),
@@ -212,7 +226,7 @@ async def delete_collection_point(
 @collectionRouter.get("/get-collection-points", tags=["Collection Point Management"])
 @limiter.limit("5/minute")
 async def get_collection_points(
-    request:Request,
+    request: Request,
     app_id: str = Header(...),
     org_id: str = Header(...),
     org_key: str = Header(...),
@@ -241,4 +255,4 @@ async def get_collection_points(
                     if "purpose_date" in purpose:
                         purpose["purpose_date"] = purpose["purpose_date"].isoformat()
 
-    return JSONResponse(content={"con_collection_points": collection_points})
+    return JSONResponse(content={"collection_points": collection_points})

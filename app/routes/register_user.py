@@ -9,12 +9,17 @@ from app.config.db import (
 from bson import ObjectId
 from datetime import datetime
 import secrets
-from slowapi import Limiter
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from limits.storage import RedisStorage
+
+# Initialize the RedisStorage for SlowAPI
+redis_url = "redis://localhost:6379/0"
+storage = RedisStorage(redis_url)
+limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
 registerUser = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
-
 
 @registerUser.post("/package-register", tags=["Package register & application"])
 @limiter.limit("2/minute")

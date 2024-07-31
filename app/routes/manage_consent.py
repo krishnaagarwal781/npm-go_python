@@ -1,10 +1,4 @@
-from fastapi import (
-    FastAPI,
-    HTTPException,
-    Header,
-    APIRouter,
-    Request
-)
+from fastapi import FastAPI, HTTPException, Header, APIRouter, Request
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 from datetime import datetime
@@ -14,11 +8,17 @@ from app.config.db import (
     developer_details_collection,
 )
 from app.models.models import ConsentPreferenceRequest
-from slowapi import Limiter
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from limits.storage import RedisStorage
 
 consentRouter = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
+
+# Initialize RedisStorage and Limiter
+redis_url = "redis://localhost:6379/0"  # Adjust the Redis URL as needed
+storage = RedisStorage(redis_url)
+limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
 
 @consentRouter.post("/post-consent-preference", tags=["Consent Preference"])
@@ -79,7 +79,7 @@ async def post_consent_preference(request: Request, data: ConsentPreferenceReque
         "data_fiduciary": {
             "df_id": "",
             "agreement_date": "",
-            "date_of_consent": datetime.datetime.utcnow().isoformat(),
+            "date_of_consent": datetime.datetime.utcnow(),
             "consent_status": "active",
             "revocation_date": None,
         },
@@ -98,8 +98,8 @@ async def post_consent_preference(request: Request, data: ConsentPreferenceReque
                 "shared": scope_item.shared,
                 "data_processor_id": scope_item.data_processor_id,
                 "cross_border": scope_item.cross_border,
-                "consent_timestamp": datetime.datetime.utcnow().isoformat(),
-                "expiry_date": datetime.datetime.utcnow().isoformat(),
+                "consent_timestamp": datetime.utcnow().isoformat(),
+                "expiry_date": datetime.utcnow().isoformat(),
             }
             for scope_item in data.consent_scope
         ],

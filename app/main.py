@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from limits.storage import RedisStorage
 from app.routes import (
     register_user,
     manage_collection_point,
@@ -10,9 +12,12 @@ from app.routes import (
 )
 
 app = FastAPI()
+redis_url = "redis://localhost:6379/0"
 
 # Initialize the Limiter
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Apply rate limiting to the entire app
 @app.get("/")

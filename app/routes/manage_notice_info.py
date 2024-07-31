@@ -1,25 +1,26 @@
-from fastapi import (
-    FastAPI,
-    HTTPException,
-    Header,
-    APIRouter,
-    Request
-)
+from fastapi import FastAPI, HTTPException, Header, APIRouter, Request
 from fastapi.responses import JSONResponse
 from app.config.db import collection_point_collection, developer_details_collection
 from bson import ObjectId
 from datetime import datetime
 import secrets
-from slowapi import Limiter
+from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from limits.storage import RedisStorage
 
 noticeRouter = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
+
+# Initialize RedisStorage and Limiter
+redis_url = "redis://localhost:6379/0"  # Adjust the Redis URL as needed
+storage = RedisStorage(redis_url)
+limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
+
 
 @noticeRouter.get("/get-notice-info", tags=["Notice Info"])
 @limiter.limit("5/minute")
 async def get_notice_info(
-    request:Request,
+    request: Request,
     cp_id: str = Header(...),
     app_id: str = Header(...),
     org_id: str = Header(...),
@@ -57,7 +58,7 @@ async def get_notice_info(
                 "header": "Consent Notice",
                 "mp3Link": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
                 "title": "Digital Personal Data Protection Act 2023",
-                "description": "An Act to provide for the processing of digital personal data in a manner that recognises both the right of individuals to protect their personal data and theneed to process such personal data for lawful purposes and for matters connected therewith or incidental thereto",
+                "description": "An Act to provide for the processing of digital personal data in a manner that recognises both the right of individuals to protect their personal data and the need to process such personal data for lawful purposes and for matters connected therewith or incidental thereto",
                 "manage_consent_title": "Manage Consent Preferences",
             },
             "button": {
