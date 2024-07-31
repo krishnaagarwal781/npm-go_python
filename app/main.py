@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request, HTTPException
+import timeit
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -19,9 +20,19 @@ limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+def timeit_wrapper(func):
+    async def wrapper(request: Request):
+        start_time = timeit.default_timer()
+        result = await func(request)
+        end_time = timeit.default_timer()
+        print(f"Execution time: {end_time - start_time} seconds")
+        return result
+    return wrapper
+
 # Apply rate limiting to the entire app
 @app.get("/")
 @limiter.limit("5/minute")
+@timeit_wrapper
 async def read_root(request: Request):
     return {"message": "Welcome bhidu"}
 

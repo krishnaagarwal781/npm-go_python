@@ -13,6 +13,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
+import timeit
 
 # Initialize the RedisStorage for SlowAPI
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"
@@ -21,8 +22,21 @@ limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
 registerUser = APIRouter()
 
+
+def timeit_wrapper(func):
+    async def wrapper(request: Request):
+        start_time = timeit.default_timer()
+        result = await func(request)
+        end_time = timeit.default_timer()
+        print(f"Execution time: {end_time - start_time} seconds")
+        return result
+
+    return wrapper
+
+
 @registerUser.post("/package-register", tags=["Package register & application"])
 @limiter.limit("2/minute")
+@timeit_wrapper
 async def package_register(request: Request, data: DeveloperDetails):
     headers = dict(request.headers)
     client_ip = request.client.host
@@ -70,8 +84,9 @@ async def package_register(request: Request, data: DeveloperDetails):
 
 @registerUser.post("/create-application", tags=["Package register & application"])
 @limiter.limit("6/minute")
+@timeit_wrapper
 async def create_application(
-    request:Request,
+    request: Request,
     data: ApplicationDetails,
     org_key: str = Header(...),
     org_secret: str = Header(...),

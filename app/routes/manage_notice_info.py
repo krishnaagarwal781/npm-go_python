@@ -8,7 +8,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
-
+import timeit
 noticeRouter = APIRouter()
 
 # Initialize RedisStorage and Limiter
@@ -16,9 +16,18 @@ redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us
 storage = RedisStorage(redis_url)
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
+def timeit_wrapper(func):
+    async def wrapper(request: Request):
+        start_time = timeit.default_timer()
+        result = await func(request)
+        end_time = timeit.default_timer()
+        print(f"Execution time: {end_time - start_time} seconds")
+        return result
+    return wrapper
 
 @noticeRouter.get("/get-notice-info", tags=["Notice Info"])
 @limiter.limit("5/minute")
+@timeit_wrapper
 async def get_notice_info(
     request: Request,
     cp_id: str = Header(...),
