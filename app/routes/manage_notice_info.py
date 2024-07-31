@@ -12,7 +12,7 @@ from limits.storage import RedisStorage
 noticeRouter = APIRouter()
 
 # Initialize RedisStorage and Limiter
-redis_url = "redis://localhost:6379/0"  # Adjust the Redis URL as needed
+redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
 storage = RedisStorage(redis_url)
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
