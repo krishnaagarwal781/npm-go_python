@@ -4,30 +4,19 @@ from app.config.db import collection_point_collection, developer_details_collect
 from bson import ObjectId
 from datetime import datetime
 import secrets
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
-import timeit
-noticeRouter = APIRouter()
 
 # Initialize RedisStorage and Limiter
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
 storage = RedisStorage(redis_url)
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
-def timeit_wrapper(func):
-    async def wrapper(request: Request):
-        start_time = timeit.default_timer()
-        result = await func(request)
-        end_time = timeit.default_timer()
-        print(f"Execution time: {end_time - start_time} seconds")
-        return result
-    return wrapper
+noticeRouter = APIRouter()
 
 @noticeRouter.get("/get-notice-info", tags=["Notice Info"])
 @limiter.limit("5/minute")
-@timeit_wrapper
 async def get_notice_info(
     request: Request,
     cp_id: str = Header(...),
@@ -36,12 +25,14 @@ async def get_notice_info(
     org_key: str = Header(...),
     org_secret: str = Header(...),
 ):
+    # Verify the organization
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
+    # Retrieve the collection point information
     collection_point = collection_point_collection.find_one(
         {"_id": ObjectId(cp_id), "org_id": org_id, "application_id": app_id}
     )
@@ -76,6 +67,7 @@ async def get_notice_info(
                 "selectAll": "Select All",
             },
         },
+        # Other languages as needed
         "hindi": {
             "collection_point": {},
             "meta_data": {
@@ -248,15 +240,9 @@ async def get_notice_info(
         "data_elements": data_elements,
     }
 
-    notice_info["english"]["collection_point"] = collection_point_info
-    notice_info["hindi"]["collection_point"] = collection_point_info
-    notice_info["tamil"]["collection_point"] = collection_point_info
-    notice_info["telugu"]["collection_point"] = collection_point_info
-    notice_info["gujarati"]["collection_point"] = collection_point_info
-    notice_info["assamese"]["collection_point"] = collection_point_info
-    notice_info["bengali"]["collection_point"] = collection_point_info
-    notice_info["bodo"]["collection_point"] = collection_point_info
-    notice_info["dogri"]["collection_point"] = collection_point_info
-    notice_info["kashmiri"]["collection_point"] = collection_point_info
+    # Update notice_info with collection_point_info for each language
+    for lang in notice_info.keys():
+        if lang != "urls":
+            notice_info[lang]["collection_point"] = collection_point_info
 
     return {"notice_info": notice_info}

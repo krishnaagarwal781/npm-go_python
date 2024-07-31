@@ -12,7 +12,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
-import timeit
+
 consentRouter = APIRouter()
 
 # Initialize RedisStorage and Limiter
@@ -20,19 +20,9 @@ redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us
 storage = RedisStorage(redis_url)
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
-def timeit_wrapper(func):
-    async def wrapper(request: Request):
-        start_time = timeit.default_timer()
-        result = await func(request)
-        end_time = timeit.default_timer()
-        print(f"Execution time: {end_time - start_time} seconds")
-        return result
-    return wrapper
-
 
 @consentRouter.post("/post-consent-preference", tags=["Consent Preference"])
 @limiter.limit("5/minute")
-@timeit_wrapper
 async def post_consent_preference(request: Request, data: ConsentPreferenceRequest):
     # Validate organisation
     organisation = developer_details_collection.find_one(
@@ -56,15 +46,35 @@ async def post_consent_preference(request: Request, data: ConsentPreferenceReque
     data_elements = collection_point.get("data_elements", [])
 
     # Validate that each data_element_name in consent_scope exists in data_elements
+    data_element_names = {element["data_element"] for element in data_elements}
     for scope_item in data.consent_scope:
-        if not any(
-            element["data_element"] == scope_item.data_element_name
-            for element in data_elements
-        ):
+        if scope_item.data_element_name not in data_element_names:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid data_element_name: {scope_item.data_element_name}",
             )
+
+    # Aggregate consents by data_element_name
+    consents_by_element = defaultdict(list)
+
+    for item in data.consent_scope:
+        consents_by_element[item.data_element_name].append(
+            {
+                "purpose_id": item.purpose_id,
+                "consent_status": item.consent_status,
+                "shared": item.shared,
+                "data_processor_id": item.data_processor_id,
+                "cross_border": item.cross_border,
+                "consent_timestamp": datetime.utcnow().isoformat(),
+                "expiry_date": datetime.utcnow().isoformat(),
+            }
+        )
+
+    # Build consent_scope in the required format
+    consent_scope_aggregated = [
+        {"data_element_name": key, "consents": value}
+        for key, value in consents_by_element.items()
+    ]
 
     # Build consent document
     consent_document = {
@@ -89,7 +99,7 @@ async def post_consent_preference(request: Request, data: ConsentPreferenceReque
         "data_fiduciary": {
             "df_id": "",
             "agreement_date": "",
-            "date_of_consent": datetime.datetime.utcnow(),
+            "date_of_consent": datetime.utcnow().isoformat(),
             "consent_status": "active",
             "revocation_date": None,
         },
@@ -100,19 +110,7 @@ async def post_consent_preference(request: Request, data: ConsentPreferenceReque
             "right_to_restrict_processing": True,
             "right_to_data_portability": True,
         },
-        "consent_scope": [
-            {
-                "data_element_name": scope_item.data_element_name,
-                "purpose_id": scope_item.purpose_id,
-                "consent_status": scope_item.consent_status,
-                "shared": scope_item.shared,
-                "data_processor_id": scope_item.data_processor_id,
-                "cross_border": scope_item.cross_border,
-                "consent_timestamp": datetime.utcnow().isoformat(),
-                "expiry_date": datetime.utcnow().isoformat(),
-            }
-            for scope_item in data.consent_scope
-        ],
+        "consent_scope": consent_scope_aggregated,
         "dp_id": data.dp_id,
         "cp_id": data.cp_id,
     }

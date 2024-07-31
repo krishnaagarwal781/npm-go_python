@@ -10,24 +10,14 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
-import timeit
 
 collectionRouter = APIRouter()
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
-def timeit_wrapper(func):
-    async def wrapper(request: Request):
-        start_time = timeit.default_timer()
-        result = await func(request)
-        end_time = timeit.default_timer()
-        print(f"Execution time: {end_time - start_time} seconds")
-        return result
-    return wrapper
 
 @collectionRouter.post("/create-collection-point", tags=["Collection Point Management"])
 @limiter.limit("5/minute")
-@timeit_wrapper
 async def create_collection_point(
     request: Request,
     data: CollectionPointRequest,
@@ -137,7 +127,6 @@ async def create_collection_point(
 
 @collectionRouter.post("/push-yaml", tags=["Collection Point Management"])
 @limiter.limit("5/minute")
-@timeit_wrapper
 async def push_yaml(
     request: Request,
     yaml_file: UploadFile = File(...),
@@ -212,7 +201,6 @@ async def push_yaml(
     "/delete-collection-point", tags=["Collection Point Management"]
 )
 @limiter.limit("5/minute")
-@timeit_wrapper
 async def delete_collection_point(
     request: Request,
     collection_point_id: str = Header(...),
@@ -237,7 +225,6 @@ async def delete_collection_point(
 
 @collectionRouter.get("/get-collection-points", tags=["Collection Point Management"])
 @limiter.limit("5/minute")
-@timeit_wrapper
 async def get_collection_points(
     request: Request,
     app_id: str = Header(...),

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Header
+from fastapi import APIRouter, HTTPException, Request, Header, Body
 from fastapi.responses import JSONResponse
 from app.models.models import DeveloperDetails, ApplicationDetails
 from app.config.db import (
@@ -9,11 +9,9 @@ from app.config.db import (
 from bson import ObjectId
 from datetime import datetime
 import secrets
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
-import timeit
 
 # Initialize the RedisStorage for SlowAPI
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"
@@ -22,28 +20,20 @@ limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
 registerUser = APIRouter()
 
-
-def timeit_wrapper(func):
-    async def wrapper(request: Request):
-        start_time = timeit.default_timer()
-        result = await func(request)
-        end_time = timeit.default_timer()
-        print(f"Execution time: {end_time - start_time} seconds")
-        return result
-
-    return wrapper
-
-
 @registerUser.post("/package-register", tags=["Package register & application"])
 @limiter.limit("2/minute")
-@timeit_wrapper
-async def package_register(request: Request, data: DeveloperDetails):
+async def package_register(
+    request: Request,
+    data: DeveloperDetails = Body(...),  # Ensure `data` is read from the request body
+):
     headers = dict(request.headers)
     client_ip = request.client.host
 
+    # Generate organization keys
     org_key = secrets.token_urlsafe(16)
     org_secret = secrets.token_urlsafe(32)
 
+    # Prepare developer data
     developer_data = data.dict()
     developer_data["headers"] = headers
     developer_data["client_ip"] = client_ip
@@ -51,6 +41,7 @@ async def package_register(request: Request, data: DeveloperDetails):
     developer_data["org_secret"] = org_secret
     developer_data["registered_at"] = datetime.utcnow()
 
+    # Insert developer details into the database
     dev_result = developer_details_collection.insert_one(developer_data)
     if not dev_result.acknowledged:
         raise HTTPException(
@@ -59,15 +50,19 @@ async def package_register(request: Request, data: DeveloperDetails):
 
     inserted_dev_id = str(dev_result.inserted_id)
 
+    # Prepare organization data
     organisation_data = {
         "organisation_name": data.organisation_name,
         "developer_email": data.developer_email,
         "developer_details_id": inserted_dev_id,
         "registered_at": datetime.utcnow(),
     }
+
+    # Insert organization details into the database
     org_result = organisation_collection.insert_one(organisation_data)
     inserted_org_id = str(org_result.inserted_id)
 
+    # Update developer details with the organization ID
     developer_details_collection.update_one(
         {"_id": ObjectId(inserted_dev_id)},
         {"$set": {"organisation_id": inserted_org_id}},
@@ -81,25 +76,26 @@ async def package_register(request: Request, data: DeveloperDetails):
         }
     )
 
-
 @registerUser.post("/create-application", tags=["Package register & application"])
 @limiter.limit("6/minute")
-@timeit_wrapper
 async def create_application(
     request: Request,
-    data: ApplicationDetails,
+    data: ApplicationDetails = Body(...),  # Ensure `data` is read from the request body
     org_key: str = Header(...),
     org_secret: str = Header(...),
     org_id: str = Header(...),
 ):
+    # Verify the organization
     organisation = developer_details_collection.find_one(
         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
 
+    # Generate application ID
     app_id = secrets.token_hex(8)
 
+    # Validate application type, stage, and user
     valid_types = ["web app", "mobile app", "ctv", "pos", "other"]
     if data.app_type not in valid_types:
         raise HTTPException(
@@ -121,17 +117,20 @@ async def create_application(
             detail=f"Invalid application_user. Must be one of: {', '.join(valid_users)}",
         )
 
+    # Prepare application data
     app_data = data.dict()
     app_data["org_id"] = org_id
     app_data["app_id"] = app_id
     app_data["registered_at"] = datetime.utcnow()
 
+    # Insert application details into the database
     app_result = application_collection.insert_one(app_data)
     if not app_result.acknowledged:
         raise HTTPException(
             status_code=500, detail="Failed to insert application details"
         )
 
+    # Prepare YAML data
     yaml_data = {
         "version": "1.0",
         "organisation_id": org_id,
