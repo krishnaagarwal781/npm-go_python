@@ -35,6 +35,11 @@ func NewHandler(client *mongo.Client, cfg *models.Config) *Handler {
 }
 
 
+// Home handles the home route.
+func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
+	render.PlainText(w, r, "Welcome to Concur API")
+}
+
 // PackageRegister handles the registration of a new package.
 func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	var data models.DeveloperDetails

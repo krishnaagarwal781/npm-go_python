@@ -15,6 +15,8 @@ func InitializeRoutes(r *chi.Mux, client *mongo.Client, cfg *models.Config) {
 	
 
 	r.Route("/",func(r chi.Router) {
+		r.Get("/", h.Home)
+
 		r.Post("/package-register", h.PackageRegister)
 		r.Post("/create-application", h.CreateApplication)
 	
