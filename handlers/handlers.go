@@ -8,16 +8,16 @@ import (
 	"go-python/models"
 	"go-python/utils"
 	"net/http"
-	
+
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/rs/zerolog/log"
-	"gopkg.in/yaml.v2"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"gopkg.in/yaml.v2"
 )
 
 // Handler represents the application handler.
@@ -860,4 +860,140 @@ func getSelectAllButton(lang string) string {
 		"kashmiri": "سبھی کا انتخاب کریں",
 	}
 	return selectAllButtons[lang]
+}
+
+
+func (h *Handler) PostConsentPreference(w http.ResponseWriter, r *http.Request){
+	var data models.ConsentPreferenceRequest
+    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    // Validate organisation
+    organisationFilter := bson.M{
+        "organisation_id": data.OrgID,
+        "org_key":         data.OrgKey,
+        "org_secret":      data.OrgSecret,
+    }
+
+    // Verify org_key and org_secret
+	isAuthorised,err:=database.IsAuthorised(context.Background(), h.client, h.cfg.Dbname, "developer_details", organisationFilter)
+	if err != nil || !isAuthorised {
+		log.Error().Err(err).Msg("Failed to verify organisation")
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, map[string]string{"message": "Failed to verify organisation"})
+		return
+	}
+
+    // Validate collection point and fetch data elements
+    cpID, err := primitive.ObjectIDFromHex(data.CPID)
+    if err != nil {
+        http.Error(w, "Invalid collection point ID format", http.StatusBadRequest)
+        return
+    }
+
+    collectionPointFilter := bson.M{
+        "_id":    cpID,
+        "org_id": data.OrgID,
+    }
+
+    var collectionPoint bson.M
+    err = database.FindOne(context.Background(), h.client,h.cfg.Dbname,"collection_points",collectionPointFilter).Decode(&collectionPoint)
+    if err != nil {
+        http.Error(w, "Collection point not found", http.StatusNotFound)
+        return
+    }
+
+    cpName, _ := collectionPoint["cp_name"].(string)
+    // dataElements, _ := collectionPoint["data_elements"].([]interface{})
+
+    // Validate that each data_element_name in consent_scope exists in data_elements
+    // for _, scopeItem := range data.ConsentScope {
+    //     found := false
+    //     for _, element := range dataElements {
+    //         elemMap := element.(map[string]interface{})
+    //         if elemMap["data_element"] == scopeItem.DataElementName {
+    //             found = true
+    //             break
+    //         }
+    //     }
+    //     if !found {
+    //         http.Error(w, "Invalid data_element_name: "+scopeItem.DataElementName, http.StatusBadRequest)
+    //         return
+    //     }
+    // }
+
+    // Build consent document
+    consentDocument := bson.M{
+        "context":                "https://consent.foundation/artifact/v1",
+        "type":                   cpName,
+        "agreement_hash_id":      "",
+        "agreement_version":      "",
+        "linked_agreement_hash":  "",
+        "data_principal": bson.M{
+            "dp_df_id":        "",
+            "dp_public_key":   "",
+            "dp_residency":    "",
+            "dp_email":        "NULL [Encrypted]",
+            "dp_verification": "",
+            "dp_child":        "",
+            "dp_attorney": bson.M{
+                "dp_df_id":      "",
+                "dp_public_key": "",
+                "dp_email":      "NULL [Encrypted]",
+            },
+        },
+        "data_fiduciary": bson.M{
+            "df_id":           "",
+            "agreement_date":  "",
+            "date_of_consent": time.Now().UTC().Format(time.RFC3339),
+            "consent_status":  "active",
+            "revocation_date": nil,
+        },
+        "data_principal_rights": bson.M{
+            "right_to_access":            true,
+            "right_to_rectify":           true,
+            "right_to_erase":             true,
+            "right_to_restrict_processing": true,
+            "right_to_data_portability":  true,
+        },
+        "consent_scope":   make([]interface{}, len(data.ConsentScope)),
+        "dp_id":           data.DPID,
+        "cp_id":           data.CPID,
+    }
+
+    for i, scopeItem := range data.ConsentScope {
+        consentDocument["consent_scope"].([]interface{})[i] = bson.M{
+            "data_element_name": scopeItem.DataElementName,
+            "purpose_id":        scopeItem.PurposeID,
+            "consent_status":    scopeItem.ConsentStatus,
+            "shared":            scopeItem.Shared,
+            "data_processor_id": scopeItem.DataProcessorID,
+            "cross_border":      scopeItem.CrossBorder,
+            "consent_timestamp": time.Now().UTC().Format(time.RFC3339),
+            "expiry_date":       time.Now().UTC().Format(time.RFC3339),
+        }
+    }
+
+
+
+    filter := bson.M{"dp_id": data.DPID, "cp_id": data.CPID}
+    update := bson.M{"$set": consentDocument}
+
+	agreementID, created, err := database.UpsertDocument(context.Background(), h.client, h.cfg.Dbname, "consent_preferences", filter, update)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+	responseMessage := "Consent preferences updated successfully"
+    if created {
+        responseMessage = "Consent preferences created successfully"
+    }
+
+    json.NewEncoder(w).Encode(models.PostConsentPreferenceResponse{
+        Message:    responseMessage,
+        AgreementID: agreementID.Hex(),
+    })
 }
