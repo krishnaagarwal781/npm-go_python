@@ -164,6 +164,60 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	// Generate application id
 	appID := utils.GenerateUUID(8)
 
+	// Make sure that the app_type is web app mobile app, ctv, pos or other
+	// make array of valid app types
+	validAppTypes := []string{"web app", "mobile app", "ctv", "pos", "other"}
+	// check if the app type is valid
+	isValidAppType := false
+	for _, validAppType := range validAppTypes {
+		if data.AppType == validAppType {
+			isValidAppType = true
+			break
+		}
+	}
+	if !isValidAppType {
+		log.Error().Msg("Invalid app type")
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"message": "Invalid app type. App type must be web app, mobile app, ctv, pos or other"})	
+		return
+	}
+
+	// Make sure that the app_stage is development, testing, production
+	// make array of valid app stages
+	validAppStages := []string{"development", "testing", "production"}
+	// check if the app stage is valid
+	isValidAppStage := false
+	for _, validAppStage := range validAppStages {
+		if data.AppStage == validAppStage {
+			isValidAppStage = true
+			break
+		}
+	}
+	if !isValidAppStage {
+		log.Error().Msg("Invalid app stage")
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"message": "Invalid app stage. App stage must be development, testing or production"})
+		return
+	}
+
+	// Check if the application user is one of the following: global, india, eu, usa, saudi arabia
+	// make array of valid application users
+	validApplicationUsers := []string{"global", "india", "eu", "usa", "saudi arabia"}
+	// check if the application user is valid
+	isValidApplicationUser := false
+	for _, validApplicationUser := range validApplicationUsers {
+		if data.ApplicationUser == validApplicationUser {
+			isValidApplicationUser = true
+			break
+		}
+	}
+	if !isValidApplicationUser {
+		log.Error().Msg("Invalid application user")
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"message": "Invalid application user. Application user must be global, india, eu, usa or saudi arabia"})
+		return
+	}
+
 	// Prepare the data to insert into MongoDB
 	appData := bson.M{
 		"org_id":           orgID,
