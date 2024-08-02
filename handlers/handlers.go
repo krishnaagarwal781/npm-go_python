@@ -140,9 +140,14 @@ func (h *Handler) CreateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Extract parameters from URL queries
-	orgID := r.URL.Query().Get("org_id")
-	orgKey := r.URL.Query().Get("org_key")
-	orgSecret := r.URL.Query().Get("org_secret")
+	// orgID := r.URL.Query().Get("org_id")
+	// orgKey := r.URL.Query().Get("org_key")
+	// orgSecret := r.URL.Query().Get("org_secret")
+
+	// Extract params from header
+	orgID := r.Header.Get("org_id")
+	orgKey := r.Header.Get("org_key")
+	orgSecret := r.Header.Get("org_secret")
 
 	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
 
@@ -543,9 +548,14 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 	// Get the collection point ID from the URL parameters
 	collectionPointID := chi.URLParam(r, "collection_point_id")
 
-	orgID := r.URL.Query().Get("org_id")
-	orgKey := r.URL.Query().Get("org_key")
-	orgSecret := r.URL.Query().Get("org_secret")
+	// orgID := r.URL.Query().Get("org_id")
+	// orgKey := r.URL.Query().Get("org_key")
+	// orgSecret := r.URL.Query().Get("org_secret")
+
+	// Get params from header
+	orgID := r.Header.Get("org_id")
+	orgKey := r.Header.Get("org_key")
+	orgSecret := r.Header.Get("org_secret")
 
 	log.Debug().Msgf("Deleting collection point: %s", collectionPointID)
 	log.Debug().Msgf("Org ID: %s, Org Key: %s, Org Secret: %s", orgID, orgKey, orgSecret)
@@ -600,10 +610,15 @@ func (h *Handler) DeleteCollectionPoint(w http.ResponseWriter, r *http.Request) 
 // GetCollectionPoints retrieves all collection points for the specified org_id and application_id
 func (h *Handler) GetCollectionPoints(w http.ResponseWriter, r *http.Request) {
 	// Get query parameters
-	orgID := r.URL.Query().Get("org_id")
-	orgKey := r.URL.Query().Get("org_key")
-	orgSecret := r.URL.Query().Get("org_secret")
+	// orgID := r.URL.Query().Get("org_id")
+	// orgKey := r.URL.Query().Get("org_key")
+	// orgSecret := r.URL.Query().Get("org_secret")
 	applicationID := chi.URLParam(r, "app_id")
+
+	// Get params from header
+	orgID := r.Header.Get("org_id")
+	orgKey := r.Header.Get("org_key")
+	orgSecret := r.Header.Get("org_secret")
 
 	// Verify org_key and org_secret
 	filter := bson.M{
