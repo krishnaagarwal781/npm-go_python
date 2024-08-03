@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import List, Dict, Optional
+from datetime import datetime
 
 
 class DeveloperDetails(BaseModel):
@@ -63,19 +64,22 @@ class LinkedInAgreement(BaseModel):
     method: str
     agreement: str
 
+
 class ConsentDetail(BaseModel):
     purpose_id: str
-    consent_status: str
+    consent_status: bool
     shared: bool
     data_processors: List[str] = []
     cross_border: bool
-    consent_timestamp: str
+    consent_timestamp: str = datetime.utcnow().isoformat()
     expiry_date: str
     retention_date: str
+
 
 class DataElement(BaseModel):
     data_element: str
     consents: List[ConsentDetail]
+
 
 class ConsentPreferenceBody(BaseModel):
     consent_language: str

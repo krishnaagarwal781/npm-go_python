@@ -1,12 +1,12 @@
 from fastapi import FastAPI, HTTPException, Header, APIRouter, Request
 from fastapi.responses import JSONResponse
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.config.db import (
     consent_preferences_collection,
     collection_point_collection,
     developer_details_collection,
-    user_consent_headers
+    user_consent_headers,
 )
 from app.models.models import *
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -31,8 +31,15 @@ def generate_body_hash(body: Dict[str, Any]) -> str:
     hash_object = hashlib.sha256(body_json)
     return hash_object.hexdigest()
 
+
 def harsh_blockchain_functionationing(consent_document: Dict[str, Any]) -> str:
     return str(uuid4())
+
+
+def calculate_future_date(base_date: datetime, days: int) -> str:
+    future_date = base_date + timedelta(days=days)
+    return future_date.isoformat()
+
 
 @consentRouter.post("/post-consent-preference", tags=["Consent Preference"])
 @limiter.limit("5/minute")
@@ -51,10 +58,16 @@ async def post_consent_preference(
     )
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
+    
+    # Print collection point to debug
+    print(collection_point)
 
+    # Extract data elements
+    data_elements = collection_point.get("data_elements", [])
+    
     # Validate data elements
     data_elements_ids = {
-        element["data_element"] for element in collection_point.get("data_elements", [])
+        element["data_element"] for element in data_elements
     }
     for element in data.data_elements:
         if element.data_element not in data_elements_ids:
@@ -62,6 +75,39 @@ async def post_consent_preference(
                 status_code=400,
                 detail=f"Invalid data_element: {element.data_element}",
             )
+
+    # Calculate dates for each data element
+    consent_scope = []
+    for element in data.data_elements:
+        # Find matching element in collection_point
+        matching_element = next(
+            (e for e in data_elements if e["data_element"] == element.data_element), 
+            None
+        )
+        if matching_element:
+            expiry_days = matching_element.get("expiry", 0)
+            retention_days = matching_element.get("retention_period", 0)
+            
+            # Calculate dates
+            expiry_date = calculate_future_date(datetime.utcnow(), expiry_days)
+            retention_date = calculate_future_date(datetime.utcnow(), retention_days)
+
+            consent_scope.append({
+                "data_element": element.data_element,
+                "consents": [
+                    {
+                        "purpose_id": consent.purpose_id,
+                        "consent_status": consent.consent_status,
+                        "shared": consent.shared,
+                        "data_processors": consent.data_processors,
+                        "cross_border": consent.cross_border,
+                        "consent_timestamp": consent.consent_timestamp,
+                        "expiry_date": expiry_date,
+                        "retention_date": retention_date,
+                    }
+                    for consent in element.consents
+                ],
+            })
 
     # Build consent document
     consent_document = {
@@ -82,14 +128,9 @@ async def post_consent_preference(
                 "revocation_date": None,
             },
             "consent_language": data.consent_language,
-            "consent_scope": [
-                {
-                    "data_element": element.data_element,
-                    "consents": [consent.dict() for consent in element.consents],
-                }
-                for element in data.data_elements
-            ],
+            "consent_scope": consent_scope,
             "timestamp": datetime.utcnow().isoformat(),
+            "agreement_id": "",  # To be updated
         },
     }
 
@@ -108,7 +149,9 @@ async def post_consent_preference(
 
     try:
         # Insert document and get inserted ID
-        user_consent_result = user_consent_headers.insert_one(user_consent_document)
+        user_consent_result = user_consent_headers.insert_one(
+            user_consent_document
+        )
         user_consent_id = user_consent_result.inserted_id
 
         # Interact with blockchain or similar service to get agreement_id
@@ -118,8 +161,13 @@ async def post_consent_preference(
         # Insert or update consent document in MongoDB
         consent_preferences_collection.update_one(
             {"df_id": df_id, "app_id": application_id, "cp_id": cp_id, "dp_id": dp_id},
-            {"$set": {"consent_document": consent_document, "user_consent_id": str(user_consent_id)}},
-            upsert=True
+            {
+                "$set": {
+                    "consent_document": consent_document,
+                    "user_consent_id": str(user_consent_id),
+                }
+            },
+            upsert=True,
         )
 
         return JSONResponse(
