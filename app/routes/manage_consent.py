@@ -46,10 +46,10 @@ def calculate_future_date(base_date: datetime, days: int) -> str:
 async def post_consent_preference(
     request: Request,
     data: ConsentPreferenceBody,
+    dp_id: str,
     df_id: str = Header(...),
     application_id: str = Header(...),
     cp_id: str = Header(...),
-    dp_id: str = Header(...),
     dp_e: Optional[str] = Header(...),
 ):
     # Validate collection point and fetch data elements
@@ -58,17 +58,15 @@ async def post_consent_preference(
     )
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
-    
+
     # Print collection point to debug
     print(collection_point)
 
     # Extract data elements
     data_elements = collection_point.get("data_elements", [])
-    
+
     # Validate data elements
-    data_elements_ids = {
-        element["data_element"] for element in data_elements
-    }
+    data_elements_ids = {element["data_element"] for element in data_elements}
     for element in data.data_elements:
         if element.data_element not in data_elements_ids:
             raise HTTPException(
@@ -81,41 +79,45 @@ async def post_consent_preference(
     for element in data.data_elements:
         # Find matching element in collection_point
         matching_element = next(
-            (e for e in data_elements if e["data_element"] == element.data_element), 
-            None
+            (e for e in data_elements if e["data_element"] == element.data_element),
+            None,
         )
         if matching_element:
             expiry_days = matching_element.get("expiry", 0)
             retention_days = matching_element.get("retention_period", 0)
-            
+
             # Calculate dates
             expiry_date = calculate_future_date(datetime.utcnow(), expiry_days)
             retention_date = calculate_future_date(datetime.utcnow(), retention_days)
 
-            consent_scope.append({
-                "data_element": element.data_element,
-                "consents": [
-                    {
-                        "purpose_id": consent.purpose_id,
-                        "consent_status": consent.consent_status,
-                        "shared": consent.shared,
-                        "data_processors": consent.data_processors,
-                        "cross_border": consent.cross_border,
-                        "consent_timestamp": consent.consent_timestamp,
-                        "expiry_date": expiry_date,
-                        "retention_date": retention_date,
-                    }
-                    for consent in element.consents
-                ],
-            })
+            consent_scope.append(
+                {
+                    "data_element": element.data_element,
+                    "consents": [
+                        {
+                            "purpose_id": consent.purpose_id,
+                            "consent_status": consent.consent_status,
+                            "shared": consent.shared,
+                            "data_processors": consent.data_processors,
+                            "cross_border": False,
+                            "encryption": None,
+                            "sensitive": None,
+                            "consent_timestamp": consent.consent_timestamp,
+                            "expiry_date": expiry_date,
+                            "retention_date": retention_date,
+                        }
+                        for consent in element.consents
+                    ],
+                }
+            )
 
     # Build consent document
     consent_document = {
         "consent": {
             "context": "https://consent.foundation/artifact/v1",
-            "type": collection_point.get("cp_name", ""),
+            "cp_name": collection_point.get("cp_name", ""),
             "agreement_hash_id": "",  # To be updated
-            "linked_agreement": data.linkedin_agreement.dict(),
+            "linked_agreement": data.linked_agreement,
             "data_principal": {
                 "dp_id": dp_id,
                 "dp_e": dp_e,
@@ -124,7 +126,6 @@ async def post_consent_preference(
                 "df_id": df_id,
                 "agreement_date": datetime.utcnow().isoformat(),
                 "date_of_consent": datetime.utcnow().isoformat(),
-                "consent_status": "active",
                 "revocation_date": None,
             },
             "consent_language": data.consent_language,
@@ -149,9 +150,7 @@ async def post_consent_preference(
 
     try:
         # Insert document and get inserted ID
-        user_consent_result = user_consent_headers.insert_one(
-            user_consent_document
-        )
+        user_consent_result = user_consent_headers.insert_one(user_consent_document)
         user_consent_id = user_consent_result.inserted_id
 
         # Interact with blockchain or similar service to get agreement_id
@@ -164,7 +163,7 @@ async def post_consent_preference(
             {
                 "$set": {
                     "consent_document": consent_document,
-                    "user_consent_id": str(user_consent_id),
+                    "user_consent_request_id": str(user_consent_id),
                 }
             },
             upsert=True,

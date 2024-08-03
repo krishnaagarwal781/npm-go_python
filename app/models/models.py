@@ -60,20 +60,12 @@ class ApplicationDetailsRequest(BaseModel):
     application_details: ApplicationDetailsExtended
 
 
-class LinkedInAgreement(BaseModel):
-    method: str
-    agreement: str
-
-
 class ConsentDetail(BaseModel):
     purpose_id: str
     consent_status: bool
     shared: bool
     data_processors: List[str] = []
-    cross_border: bool
     consent_timestamp: str = datetime.utcnow().isoformat()
-    expiry_date: str
-    retention_date: str
 
 
 class DataElement(BaseModel):
@@ -83,5 +75,5 @@ class DataElement(BaseModel):
 
 class ConsentPreferenceBody(BaseModel):
     consent_language: str
-    linkedin_agreement: LinkedInAgreement
+    linked_agreement: str
     data_elements: List[DataElement]
