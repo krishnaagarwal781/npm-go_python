@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 
+
 class DeveloperDetails(BaseModel):
     developer_email: str
     developer_website: str
@@ -58,20 +59,25 @@ class ApplicationDetailsRequest(BaseModel):
     application_details: ApplicationDetailsExtended
 
 
-class ConsentScopeItem(BaseModel):
-    data_element_name: str
+class LinkedInAgreement(BaseModel):
+    method: str
+    agreement: str
+
+class ConsentDetail(BaseModel):
     purpose_id: str
-    consent_status: bool
+    consent_status: str
     shared: bool
-    data_processor_id: List[str] = []
+    data_processors: List[str] = []
     cross_border: bool
+    consent_timestamp: str
+    expiry_date: str
+    retention_date: str
 
+class DataElement(BaseModel):
+    data_element: str
+    consents: List[ConsentDetail]
 
-class ConsentPreferenceRequest(BaseModel):
-    org_id: str
-    org_key: str
-    org_secret: str
-    cp_id: str
-    dp_id: str
-    dp_email_hash: str
-    consent_scope: List[ConsentScopeItem]
+class ConsentPreferenceBody(BaseModel):
+    consent_language: str
+    linkedin_agreement: LinkedInAgreement
+    data_elements: List[DataElement]

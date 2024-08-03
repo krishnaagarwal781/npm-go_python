@@ -6,12 +6,17 @@ from app.config.db import (
     consent_preferences_collection,
     collection_point_collection,
     developer_details_collection,
+    user_consent_headers
 )
-from app.models.models import ConsentPreferenceRequest
+from app.models.models import *
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
+import hashlib
+import json
+from typing import Dict, Any
+from uuid import uuid4
 
 consentRouter = APIRouter()
 
@@ -21,122 +26,107 @@ storage = RedisStorage(redis_url)
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 
 
+def generate_body_hash(body: Dict[str, Any]) -> str:
+    body_json = json.dumps(body, sort_keys=True).encode("utf-8")
+    hash_object = hashlib.sha256(body_json)
+    return hash_object.hexdigest()
+
+def harsh_blockchain_functionationing(consent_document: Dict[str, Any]) -> str:
+    return str(uuid4())
+
 @consentRouter.post("/post-consent-preference", tags=["Consent Preference"])
 @limiter.limit("5/minute")
-async def post_consent_preference(request: Request, data: ConsentPreferenceRequest):
-    # Validate organisation
-    organisation = developer_details_collection.find_one(
-        {
-            "organisation_id": data.org_id,
-            "org_key": data.org_key,
-            "org_secret": data.org_secret,
-        }
-    )
-    if not organisation:
-        raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
-
+async def post_consent_preference(
+    request: Request,
+    data: ConsentPreferenceBody,
+    df_id: str = Header(...),
+    application_id: str = Header(...),
+    cp_id: str = Header(...),
+    dp_id: str = Header(...),
+    dp_e: Optional[str] = Header(...),
+):
     # Validate collection point and fetch data elements
     collection_point = collection_point_collection.find_one(
-        {"_id": ObjectId(data.cp_id), "org_id": data.org_id}
+        {"_id": ObjectId(cp_id), "application_id": application_id}
     )
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
 
-    cp_name = collection_point.get("cp_name", "")
-    data_elements = collection_point.get("data_elements", [])
-
-    # Validate that each data_element_name in consent_scope exists in data_elements
-    data_element_names = {element["data_element"] for element in data_elements}
-    for scope_item in data.consent_scope:
-        if scope_item.data_element_name not in data_element_names:
+    # Validate data elements
+    data_elements_ids = {
+        element["data_element"] for element in collection_point.get("data_elements", [])
+    }
+    for element in data.data_elements:
+        if element.data_element not in data_elements_ids:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid data_element_name: {scope_item.data_element_name}",
+                detail=f"Invalid data_element: {element.data_element}",
             )
-
-    # Aggregate consents by data_element_name
-    consents_by_element = defaultdict(list)
-
-    for item in data.consent_scope:
-        consents_by_element[item.data_element_name].append(
-            {
-                "purpose_id": item.purpose_id,
-                "consent_status": item.consent_status,
-                "shared": item.shared,
-                "data_processor_id": item.data_processor_id,
-                "cross_border": item.cross_border,
-                "consent_timestamp": datetime.utcnow().isoformat(),
-                "expiry_date": datetime.utcnow().isoformat(),
-            }
-        )
-
-    # Build consent_scope in the required format
-    consent_scope_aggregated = [
-        {"data_element_name": key, "consents": value}
-        for key, value in consents_by_element.items()
-    ]
 
     # Build consent document
     consent_document = {
-        "context": "https://consent.foundation/artifact/v1",
-        "type": cp_name,
-        "agreement_hash_id": "",
-        "agreement_version": "",
-        "linked_agreement_hash": "",
-        "data_principal": {
-            "dp_df_id": "",
-            "dp_public_key": "",
-            "dp_residency": "",
-            "dp_email": "NULL [Encrypted]",
-            "dp_verification": "",
-            "dp_child": "",
-            "dp_attorney": {
-                "dp_df_id": "",
-                "dp_public_key": "",
-                "dp_email": "NULL [Encrypted]",
+        "consent": {
+            "context": "https://consent.foundation/artifact/v1",
+            "type": collection_point.get("cp_name", ""),
+            "agreement_hash_id": "",  # To be updated
+            "linked_agreement": data.linkedin_agreement.dict(),
+            "data_principal": {
+                "dp_id": dp_id,
+                "dp_e": dp_e,
             },
+            "data_fiduciary": {
+                "df_id": df_id,
+                "agreement_date": datetime.utcnow().isoformat(),
+                "date_of_consent": datetime.utcnow().isoformat(),
+                "consent_status": "active",
+                "revocation_date": None,
+            },
+            "consent_language": data.consent_language,
+            "consent_scope": [
+                {
+                    "data_element": element.data_element,
+                    "consents": [consent.dict() for consent in element.consents],
+                }
+                for element in data.data_elements
+            ],
+            "timestamp": datetime.utcnow().isoformat(),
         },
-        "data_fiduciary": {
-            "df_id": "",
-            "agreement_date": "",
-            "date_of_consent": datetime.utcnow().isoformat(),
-            "consent_status": "active",
-            "revocation_date": None,
-        },
-        "data_principal_rights": {
-            "right_to_access": True,
-            "right_to_rectify": True,
-            "right_to_erase": True,
-            "right_to_restrict_processing": True,
-            "right_to_data_portability": True,
-        },
-        "consent_scope": consent_scope_aggregated,
-        "dp_id": data.dp_id,
-        "cp_id": data.cp_id,
     }
 
-    # Insert or update the consent preference in MongoDB
-    result = consent_preferences_collection.find_one_and_update(
-        {"dp_id": data.dp_id, "cp_id": data.cp_id},
-        {"$set": consent_document},
-        upsert=True,
-        return_document=True,
-    )
+    # Generate hash for consent_document
+    consent_hash = generate_body_hash(consent_document)
+    consent_document["consent"]["agreement_hash_id"] = consent_hash
 
-    if result:
+    # Save request headers and body in user_consent_headers collection
+    body_hash = generate_body_hash(data.dict())
+    user_consent_document = {
+        "headers": dict(request.headers),
+        "body": data.dict(),
+        "body_hash": body_hash,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    try:
+        # Insert document and get inserted ID
+        user_consent_result = user_consent_headers.insert_one(user_consent_document)
+        user_consent_id = user_consent_result.inserted_id
+
+        # Interact with blockchain or similar service to get agreement_id
+        agreement_id = harsh_blockchain_functionationing(consent_document)
+        consent_document["consent"]["agreement_id"] = agreement_id
+
+        # Insert or update consent document in MongoDB
+        consent_preferences_collection.update_one(
+            {"df_id": df_id, "app_id": application_id, "cp_id": cp_id, "dp_id": dp_id},
+            {"$set": {"consent_document": consent_document, "user_consent_id": str(user_consent_id)}},
+            upsert=True
+        )
+
         return JSONResponse(
             content={
                 "message": "Consent preferences updated successfully",
-                "agreement_id": str(result["_id"]),
+                "agreement_id": agreement_id,
             }
         )
-    else:
-        inserted_id = str(
-            consent_preferences_collection.insert_one(consent_document).inserted_id
-        )
-        return JSONResponse(
-            content={
-                "message": "Consent preferences created successfully",
-                "agreement_id": inserted_id,
-            }
-        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
