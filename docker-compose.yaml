@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   concur-backend:
-    image: breeze5690/concur-backend:v0
+    image: concur/concur-backend:v0
     ports:
       - "8080:8080"
     environment:

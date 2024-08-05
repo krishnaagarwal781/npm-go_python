@@ -1,4 +1,3 @@
-
 package routes
 
 import (
@@ -6,6 +5,7 @@ import (
 	"go-python/models"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -13,6 +13,16 @@ import (
 func InitializeRoutes(r *chi.Mux, client *mongo.Client, cfg *models.Config) {
 	h := handlers.NewHandler(client, cfg)
 	
+	// Add cors middleware
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}))
+
 
 	r.Route("/",func(r chi.Router) {
 		r.Get("/", h.Home)
@@ -29,15 +39,5 @@ func InitializeRoutes(r *chi.Mux, client *mongo.Client, cfg *models.Config) {
 	})
 	
 
-	// r.Route("/api", func(r chi.Router) {
-	// 	r.Post("/package-register", h.PackageRegister)
-	// 	r.Post("/create-application", h.CreateApplication)
-
-		
-	// 	r.Post("/create-collection-point", h.CreateCollectionPoint)
-	// 	r.Post("/push-yaml", h.PushYaml)
-	// 	r.Delete("//delete-collection-point", h.DeleteCollectionPoint)
-	// 	r.Get("/get-collection-points", h.GetCollectionPoints)
-	// })
-
+	
 }
