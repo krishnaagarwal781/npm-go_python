@@ -23,8 +23,8 @@ type DeveloperDetails struct {
 	Id string `json:"id" bson:"_id,omitempty"`
 	DeveloperEmail   string `json:"developer_email" bson:"developer_email"`
 	DeveloperWebsite string `json:"developer_website" bson:"developer_website"`
-	DeveloperCity    string `json:"developer_city" bson:"developer_city"`
 	DeveloperMobile  string `json:"developer_mobile" bson:"developer_mobile"`
+	ContactConsent   bool   `json:"contact_consent" bson:"contact_consent"`
 	OrganisationName string `json:"organisation_name" bson:"organisation_name"`
 	OrganisationKey  string `json:"org_key" bson:"org_key"`
 	OrganisationSecret string `json:"org_secret" bson:"org_secret"`

@@ -63,7 +63,7 @@ func (h *Handler) PackageRegister(w http.ResponseWriter, r *http.Request) {
 	developerData := bson.M{
 		"developer_email":   data.DeveloperEmail,
 		"developer_website": data.DeveloperWebsite,
-		"developer_city":    data.DeveloperCity,
+		"contact_consent":    data.ContactConsent,
 		"developer_mobile":  data.DeveloperMobile,
 		"organisation_name": data.OrganisationName,
 		"org_secret":            secret,
