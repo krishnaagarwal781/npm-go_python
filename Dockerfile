@@ -27,7 +27,8 @@ RUN mkdir /concur-backend/logs
 # Copy the built binary from the build stage
 COPY --from=builder /concur-backend/app /concur-backend/app
 
-
+# Make the binary executable
+RUN chmod +x /concur-backend/app
 
 
 # Set the working directory
