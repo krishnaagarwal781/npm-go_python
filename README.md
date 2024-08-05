@@ -1,7 +1,8 @@
 ## Running code
-- `docker build -f Dockerfile.dev -t concur/concur-backend:v0`
+- `docker build -f Dockerfile -t concur/concur-backend:v0`
 - Update the env variables in the docker-compose file
 - `docker-compose up`
+
 
 ## Env vars
 - `CONCUR_DB_NAME` : database name for the operation
