@@ -23,8 +23,8 @@ type DeveloperDetails struct {
 	Id string `json:"id" bson:"_id,omitempty"`
 	DeveloperEmail   string `json:"developer_email" bson:"developer_email"`
 	DeveloperWebsite string `json:"developer_website" bson:"developer_website"`
-	DeveloperCity    string `json:"developer_city" bson:"developer_city"`
 	DeveloperMobile  string `json:"developer_mobile" bson:"developer_mobile"`
+	ContactConsent   bool   `json:"contact_consent" bson:"contact_consent"`
 	OrganisationName string `json:"organisation_name" bson:"organisation_name"`
 	OrganisationKey  string `json:"org_key" bson:"org_key"`
 	OrganisationSecret string `json:"org_secret" bson:"org_secret"`
@@ -116,14 +116,6 @@ type Purpose struct {
 
 
 
-
-
-
-
-
-
-
-
 type CollectionPointRequest struct {
 	OrgID string `json:"org_id"`
 	AppID string `json:"application_id"`
@@ -145,4 +137,29 @@ type YamlUpdateResponse struct {
 
 type GetCollectionPointsResponse struct {
 	CollectionPoints []CollectionPointData `json:"con_collection_points"`
+}
+
+
+
+type ConsentPreferenceRequest struct {
+    OrgID        string          `json:"org_id"`
+    OrgKey       string          `json:"org_key"`
+    OrgSecret    string          `json:"org_secret"`
+    CPID         string          `json:"cp_id"`
+    DPID         string          `json:"dp_id"`
+    ConsentScope []ConsentScope  `json:"consent_scope"`
+}
+
+type ConsentScope struct {
+    DataElementName string `json:"data_element_name"`
+    PurposeID       string `json:"purpose_id"`
+    ConsentStatus   string `json:"consent_status"`
+    Shared          bool   `json:"shared"`
+    DataProcessorID []string `json:"data_processor_id"`
+    CrossBorder     bool   `json:"cross_border"`
+}
+
+type PostConsentPreferenceResponse struct {
+    Message    string `json:"message"`
+    AgreementID string `json:"agreement_id"`
 }

@@ -2,10 +2,12 @@ package database
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	
 	"github.com/rs/zerolog/log"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -110,3 +112,24 @@ func DeleteOne(ctx context.Context, client *mongo.Client, databaseName string, c
 	return result, nil
 }
 
+
+
+func UpsertDocument(ctx context.Context, client *mongo.Client, dbName, collectionName string, filter, update bson.M) (primitive.ObjectID, bool, error) {
+    collection := client.Database(dbName).Collection(collectionName)
+    opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+
+    var result bson.M
+    err := collection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result)
+    if err != nil {
+        if errors.Is(err, mongo.ErrNoDocuments) {
+            insertResult, insertErr := collection.InsertOne(ctx, update["$set"])
+            if insertErr != nil {
+                return primitive.ObjectID{}, false, insertErr
+            }
+            return insertResult.InsertedID.(primitive.ObjectID), true, nil
+        }
+        return primitive.ObjectID{}, false, err
+    }
+
+    return result["_id"].(primitive.ObjectID), false, nil
+}
