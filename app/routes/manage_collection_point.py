@@ -35,6 +35,8 @@ async def create_collection_point(
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
+
+    purpose_id = secrets.token_hex(8)
     collection_point_data = {
         "org_id": org_id,
         "application_id": application_id,
@@ -55,7 +57,7 @@ async def create_collection_point(
                 "expiry": de.expiry,
                 "purposes": [
                     {
-                        "purpose_id": secrets.token_hex(8),
+                        "purpose_id": purpose_id,
                         "purpose_description": purpose.purpose_description,
                         "purpose_language": purpose.purpose_language,
                     }
@@ -107,7 +109,7 @@ async def create_collection_point(
                 "expiry": de.expiry,
                 "purposes": [
                     {
-                        "purpose_id":purpose.purpose_id,
+                        "purpose_id": purpose_id,
                         "purpose_description": purpose.purpose_description,
                         "purpose_language": purpose.purpose_language,
                     }
