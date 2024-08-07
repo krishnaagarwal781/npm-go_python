@@ -107,6 +107,7 @@ async def create_collection_point(
                 "expiry": de.expiry,
                 "purposes": [
                     {
+                        "purpose_id":purpose.purpose_id,
                         "purpose_description": purpose.purpose_description,
                         "purpose_language": purpose.purpose_language,
                     }

@@ -28,7 +28,7 @@ class DataElement(BaseModel):
     data_element_title: str
     data_element_description: str
     data_owner: List[str]
-    legal_basis: str
+    legal_basis: bool
     retention_period: int
     expiry: int
     purposes: List[Purpose]
