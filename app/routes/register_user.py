@@ -70,9 +70,9 @@ async def package_register(
 
     return JSONResponse(
         content={
-            "con_org_id": inserted_org_id,
-            "con_org_key": org_key,
-            "con_org_secret": org_secret,
+            "concur_org_id": inserted_org_id,
+            "concur_org_key": org_key,
+            "concur_org_secret": org_secret,
         }
     )
 
@@ -149,7 +149,7 @@ async def create_application(
     return JSONResponse(
         content={
             "yaml_data": yaml_data,
-            "con_app_id": app_id,
+            "concur_app_id": app_id,
             "app_type": data.app_type,
             "app_name": data.app_name,
             "app_stage": data.app_stage,
