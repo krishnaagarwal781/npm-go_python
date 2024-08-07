@@ -136,10 +136,36 @@ async def create_collection_point(
     try:
         api_url = "https://consent-foundation.adnan-qasim.me/add-purpose"
         api_headers = {"Content-Type": "application/json"}
-        api_response = requests.post(
-            api_url, json=purposes_payload, headers=api_headers
-        )
+        api_response = requests.post(api_url, json=purposes_payload, headers=api_headers)
         api_response.raise_for_status()
+
+        # Extract the inserted_ids from the response
+        api_response_data = api_response.json()
+        inserted_ids = api_response_data.get("inserted_ids", [])
+
+        if not inserted_ids:
+            raise HTTPException(
+                status_code=500,
+                detail="No translated_purpose_id returned from the consent directory"
+            )
+
+        # Update the collection_point_collection with translated_purpose_id
+        for de_idx, de in enumerate(data.data_elements):
+            for idx, purpose in enumerate(de.purposes):
+                translated_purpose_id = inserted_ids[idx] if idx < len(inserted_ids) else None
+                if translated_purpose_id:
+                    collection_point_collection.update_one(
+                        {
+                            "_id": cp_result.inserted_id,
+                            f"data_elements.{de_idx}.purposes.{idx}.purpose_id": purpose_id,
+                        },
+                        {
+                            "$set": {
+                                f"data_elements.{de_idx}.purposes.{idx}.translated_purpose_id": translated_purpose_id,
+                            }
+                        }
+                    )
+
     except requests.RequestException as e:
         raise HTTPException(
             status_code=500,
