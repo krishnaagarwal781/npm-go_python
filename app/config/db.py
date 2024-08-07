@@ -1,9 +1,9 @@
 from pymongo import MongoClient
 
 client = MongoClient(
-    "mongodb+srv://sniplyuser:NXy7R7wRskSrk3F2@cataxprod.iwac6oj.mongodb.net/?retryWrites=true&w=majority"
+    "mongodb+srv://concur-admin:oApIL0eGKTzHeWrn@concur-backend-db.3jzk7uh.mongodb.net"
 )
-db = client["python-go3"]
+db = client["python-sdk"]
 developer_details_collection = db["developer_details"]
 organisation_collection = db["organisation_details"]
 application_collection = db["org_applications"]

@@ -150,6 +150,13 @@ async def push_yaml(
     except yaml.YAMLError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid YAML file: {exc}")
 
+    if not yaml_data.get("applications"):
+        raise HTTPException(
+            status_code=400, detail="No applications found in YAML file"
+        )
+
+    updated_count = 0
+
     for application in yaml_data.get("applications", []):
         if application.get("application_id") == app_id:
             for cp_details in application.get("collection_points_data", []):
@@ -159,6 +166,18 @@ async def push_yaml(
                         {"_id": ObjectId(cp_id)}
                     )
                     if existing_cp:
+                        # Process purposes to assign new purpose_id if needed
+                        new_data_elements = []
+                        for de in cp_details.get("data_elements", []):
+                            new_purposes = []
+                            for purpose in de.get("purposes", []):
+                                if not purpose.get("purpose_id"):
+                                    purpose["purpose_id"] = secrets.token_hex(8)
+                                new_purposes.append(purpose)
+                            new_de = de.copy()
+                            new_de["purposes"] = new_purposes
+                            new_data_elements.append(new_de)
+
                         update_result = collection_point_collection.update_one(
                             {"_id": ObjectId(cp_id)},
                             {
@@ -172,18 +191,12 @@ async def push_yaml(
                                     "cp_url": cp_details.get(
                                         "cp_url", existing_cp.get("cp_url")
                                     ),
-                                    "data_elements": cp_details.get(
-                                        "data_elements",
-                                        existing_cp.get("data_elements"),
-                                    ),
+                                    "data_elements": new_data_elements,
                                 }
                             },
                         )
-                        if update_result.modified_count == 0:
-                            raise HTTPException(
-                                status_code=500,
-                                detail=f"Failed to update collection point {cp_id}",
-                            )
+                        if update_result.modified_count > 0:
+                            updated_count += 1
                     else:
                         raise HTTPException(
                             status_code=404,
@@ -195,8 +208,49 @@ async def push_yaml(
                         detail="collection_point_id is required for each collection point",
                     )
 
+    if updated_count == 0:
+        raise HTTPException(
+            status_code=500,
+            detail="No collection points were updated",
+        )
+
+    # Fetch the updated data from MongoDB
+    updated_collection_points = list(
+        collection_point_collection.find({"org_id": org_id, "application_id": app_id})
+    )
+
+    # Convert updated data to YAML format
+    updated_yaml_data = {
+        "version": "1.0",
+        "organisation_id": org_id,
+        "applications": [
+            {
+                "application_id": app_id,
+                "type": application.get("type", ""),
+                "name": application.get("name", ""),
+                "stage": application.get("stage", ""),
+                "application_user": application.get("application_user", ""),
+                "collection_points_data": [
+                    {
+                        "cp_id": str(cp["_id"]),
+                        "cp_name": cp.get("cp_name", ""),
+                        "cp_status": cp.get("cp_status", ""),
+                        "cp_url": cp.get("cp_url", ""),
+                        "data_elements": cp.get("data_elements", []),
+                    }
+                    for cp in updated_collection_points
+                ],
+            }
+            for application in yaml_data.get("applications", [])
+            if application.get("application_id") == app_id
+        ],
+    }
+
     return JSONResponse(
-        content={"message": "YAML file updated successfully", "yaml_data": yaml_data}
+        content={
+            "message": f"YAML file updated successfully, {updated_count} collection points updated",
+            "updated_yaml_data": updated_yaml_data,
+        }
     )
 
 
