@@ -6,10 +6,12 @@ import secrets
 import yaml
 from app.config.db import collection_point_collection, developer_details_collection
 from app.models.models import CollectionPointRequest
+from app.schemas.utils import save_data_to_concur
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from limits.storage import RedisStorage
+import requests
 
 collectionRouter = APIRouter()
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
@@ -88,6 +90,34 @@ async def create_collection_point(
         raise HTTPException(
             status_code=500, detail=f"Failed to update collection point URL: {str(e)}"
         )
+        
+    for de in data.data_elements:
+        payload = {
+            "data_element_type": de.data_element,
+            "data_element_concur_name": de.data_element_title,
+            "data_element_short_description": de.data_element_description,
+            "data_element_original_name": de.data_element,
+            "added_by": "",
+            "can_be_identifier": False,
+            "has_personal_info": False,
+            "is_sensitive_data": False,
+            "consent_required": True,
+            "third_party_vendor": False,
+            "cross_border": False,
+            "is_field_encrypted": False,
+            "collection_points": [cp_id],
+            "publish_date": datetime.datetime.utcnow().isoformat(),
+            "data_element_mapping": "string",
+            "status": "active",
+            "related_data_element": [],
+            "data_element_classification_tag": "string",
+        }
+
+        concur_response = save_data_to_concur(org_id, payload)
+        if not concur_response:
+            raise HTTPException(
+                status_code=500, detail="Failed to save data to Concur service"
+            )
 
     response_data = {
         "cp_id": cp_id,
