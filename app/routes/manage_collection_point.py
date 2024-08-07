@@ -90,7 +90,7 @@ async def create_collection_point(
         raise HTTPException(
             status_code=500, detail=f"Failed to update collection point URL: {str(e)}"
         )
-        
+
     for de in data.data_elements:
         payload = {
             "data_element_type": de.data_element,
@@ -118,6 +118,33 @@ async def create_collection_point(
             raise HTTPException(
                 status_code=500, detail="Failed to save data to Concur service"
             )
+
+    # Adding Purposes to consent directory
+    purposes_payload = {
+        "industry": ["66a4cf825cb74730faf48626"],
+        "sub_category": "Customer Support",  # Replace with the appropriate value
+        "purpose": [
+            {
+                "description": purpose.purpose_description,
+                "lang_short_code": purpose.purpose_language,
+            }
+            for de in data.data_elements
+            for purpose in de.purposes
+        ],
+    }
+
+    try:
+        api_url = "https://consent-foundation.adnan-qasim.me/add-purpose"
+        api_headers = {"Content-Type": "application/json"}
+        api_response = requests.post(
+            api_url, json=purposes_payload, headers=api_headers
+        )
+        api_response.raise_for_status()
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send purposes to the consent directory: {str(e)}",
+        )
 
     response_data = {
         "cp_id": cp_id,
