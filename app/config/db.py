@@ -10,5 +10,6 @@ application_collection = db["org_applications"]
 collection_point_collection = db["collection_points"]
 consent_preferences_collection = db["consent_preferences"]
 user_consent_headers = db["user_consent_headers"]
+static_notice_data = db["static_notice_data"]
 
 consent_directory_collection = client['Consent_directory_db']['consent_directory_new_krishna']
