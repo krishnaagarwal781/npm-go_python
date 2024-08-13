@@ -54,8 +54,8 @@ async def get_notice_info(
             "pauseIcon": "https://www.svgrepo.com/show/149256/pause-button.svg",
             "arrowIcon": "https://cdn.icon-icons.com/icons2/2248/PNG/512/arrow_top_right_icon_135926.png",
             "mp3Link": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-            "dpar_link": "https://www.instagram.com",
-            "manage_consent_link": "https://www.facebook.com",
+            "dpar_link": "https://privacy-center.vercel.app/dparwebform",
+            "manage_consent_link": "http://localhost:3000/manage-consent",
         }
     }
 
