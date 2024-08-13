@@ -50,7 +50,7 @@ async def get_notice_info(
     # Initialize notice_info with URLs
     notice_info = {
         "urls": {
-            "logo": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2K4cwj_yTWk-rSebFdFF-tX1yMKE8o_Uwnk5H9GYkIoqSKHAvt-pYaB1dEQHK1paNNk&usqp=CAU",
+            "logo": "https://i.postimg.cc/kX30VtbW/megamart-logo.png",
             "speakIcon": "https://www.svgrepo.com/show/165176/speaking.svg",
             "pauseIcon": "https://www.svgrepo.com/show/149256/pause-button.svg",
             "arrowIcon": "https://cdn.icon-icons.com/icons2/2248/PNG/512/arrow_top_right_icon_135926.png",
