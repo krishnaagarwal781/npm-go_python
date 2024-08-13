@@ -4,6 +4,7 @@ from app.config.db import (
     collection_point_collection,
     developer_details_collection,
     static_notice_data,
+    consent_directory_collection
 )
 from bson import ObjectId
 from datetime import datetime
@@ -54,8 +55,8 @@ async def get_notice_info(
             "pauseIcon": "https://www.svgrepo.com/show/149256/pause-button.svg",
             "arrowIcon": "https://cdn.icon-icons.com/icons2/2248/PNG/512/arrow_top_right_icon_135926.png",
             "mp3Link": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-            "dpar_link": "https://www.instagram.com",
-            "manage_consent_link": "https://www.facebook.com",
+            "dpar_link": "https://privacy-center.vercel.app/dparwebform",
+            "manage_consent_link": "http://localhost:3000/manage-consent",
         }
     }
 
@@ -83,44 +84,51 @@ async def get_notice_info(
                 }
 
     # Add collection point data to each language
-    data_elements = []
-    for de in collection_point.get("data_elements", []):
-        purposes = []
-        for purpose in de.get("purposes", []):
-            purposes.append(
-                {
-                    "purpose_id": purpose.get("purpose_id", ""),
-                    "purpose_description": purpose.get("purpose_description", ""),
-                    "purpose_language": purpose.get("purpose_language", ""),
-                }
-            )
-        data_elements.append(
-            {
-                "data_element": de.get("data_element", ""),
-                "data_element_title": de.get("data_element_title", ""),
-                "data_element_description": de.get("data_element_description", ""),
-                "data_owner": de.get("data_owner", ""),
-                "legal_basis": de.get("legal_basis", ""),
-                "retention_period": de.get("retention_period", ""),
-                "cross_border": de.get("cross_border", False),
-                "sensitive": de.get("sensitive", False),
-                "encrypted": de.get("encrypted", False),
-                "expiry": de.get("expiry", ""),
-                "purposes": purposes,
-            }
-        )
-
-    collection_point_info = {
-        "cp_id": str(collection_point["_id"]),
-        "cp_name": collection_point.get("cp_name", ""),
-        "cp_status": collection_point.get("cp_status", ""),
-        "cp_url": collection_point.get("cp_url", ""),
-        "data_elements": data_elements,
-    }
-
-    # Update notice_info with collection_point_info for each language
     for lang_key in notice_info.keys():
         if lang_key != "urls":
-            notice_info[lang_key]["collection_point"] = collection_point_info
+            data_elements = []
+            for de in collection_point.get("data_elements", []):
+                purposes = []
+                for purpose in de.get("purposes", []):
+                    translated_purposes = consent_directory_collection.find_one(
+                        {"_id": ObjectId(purpose.get("translated_purpose_id"))}
+                    )
+
+                    if translated_purposes:
+                        for translated_purpose in translated_purposes.get("purpose", []):
+                            # Filter purposes by language
+                            if translated_purpose.get("lang_title", "").lower() == notice_info[lang_key].get("lang_title", "").lower():
+                                purposes.append(
+                                    {
+                                        "purpose_id": purpose.get("purpose_id", ""),
+                                        "purpose_description": translated_purpose.get("description", ""),
+                                        "purpose_language": translated_purpose.get("lang_title", ""),
+                                    }
+                                )
+
+                data_elements.append(
+                    {
+                        "data_element": de.get("data_element", ""),
+                        "data_element_title": de.get("data_element_title", ""),
+                        "data_element_description": de.get("data_element_description", ""),
+                        "data_owner": de.get("data_owner", ""),
+                        "legal_basis": de.get("legal_basis", False),
+                        "retention_period": de.get("retention_period", 0),
+                        "cross_border": de.get("cross_border", False),
+                        "sensitive": de.get("sensitive", False),
+                        "encrypted": de.get("encrypted", False),
+                        "expiry": de.get("expiry", 0),
+                        "purposes": purposes,
+                    }
+                )
+
+            # Update notice_info with the filtered collection point data for each language
+            notice_info[lang_key]["collection_point"] = {
+                "cp_id": str(collection_point["_id"]),
+                "cp_name": collection_point.get("cp_name", ""),
+                "cp_status": collection_point.get("cp_status", ""),
+                "cp_url": collection_point.get("cp_url", ""),
+                "data_elements": data_elements,
+            }
 
     return {"notice_info": notice_info}
