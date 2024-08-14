@@ -19,6 +19,7 @@ class ApplicationDetails(BaseModel):
 
 
 class Purpose(BaseModel):
+    purpose_id: Optional[str] = None
     purpose_description: str
     purpose_language: str
 
