@@ -4,7 +4,7 @@ from bson import ObjectId
 import datetime
 import secrets
 import yaml
-from app.config.db import collection_point_collection, developer_details_collection
+from app.config.db import collection_point_collection, developer_details_collection, translated_data_element_collection, consent_directory_languages_collection
 from app.models.models import CollectionPointRequest
 from app.schemas.utils import save_data_to_concur
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -94,6 +94,37 @@ async def create_collection_point(
         raise HTTPException(
             status_code=500, detail=f"Failed to update collection point URL: {str(e)}"
         )
+
+    for de in data.data_elements:
+        #saving data for translation
+        all_languages = list(consent_directory_languages_collection.find())
+        translated_element_structure = []
+        for lang in all_languages:
+            translated_element_structure.append({
+                "lang_title": lang["lang_title"],
+                "lang_display": lang["lang_display"],
+                "lang_short_code": lang["lang_short_code"],
+                "translation_symbol": lang["translation_symbol"],
+                "data_element_concur_name": de.data_element_title if lang["lang_short_code"] == "en" else "",
+            })
+        translated_data_element_payload = {
+            "cp_id": cp_id,
+            "translated_elements": translated_element_structure,
+            "is_translated": False,
+        }
+
+        try:
+            translated_data_element_id = translated_data_element_collection.insert_one(translated_data_element_payload).inserted_id
+            collection_point_collection.update_one(
+                {"_id": cp_result.inserted_id, "data_elements.data_element": de.data_element},
+                {"$set": {"data_elements.$.translated_data_element_id": str(translated_data_element_id)}},
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to insert translated data element details: {str(e)}",
+            )
+
 
     for de in data.data_elements:
         payload = {

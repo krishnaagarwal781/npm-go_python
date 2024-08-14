@@ -4,7 +4,8 @@ from app.config.db import (
     collection_point_collection,
     developer_details_collection,
     static_notice_data,
-    consent_directory_collection
+    consent_directory_collection,
+    translated_data_element_collection,
 )
 from bson import ObjectId
 from datetime import datetime
@@ -105,11 +106,22 @@ async def get_notice_info(
                                         "purpose_language": translated_purpose.get("lang_title", ""),
                                     }
                                 )
+                translated_data = translated_data_element_collection.find_one(
+                    {"_id": ObjectId(de.get("translated_data_element_id"))}
+                )
+                translated_text = None
+                if translated_data:
+                    for text in translated_data.get("translated_elements", []):
+                        # Filter data elements by language
+                        if text.get("lang_title", "").lower() == notice_info[lang_key].get("lang_title", "").lower():
+                            translated_text = text.get("data_element_concur_name", "")
+                            break
+
 
                 data_elements.append(
                     {
                         "data_element": de.get("data_element", ""),
-                        "data_element_title": de.get("data_element_title", ""),
+                        "data_element_title": translated_text if translated_text else de.get("data_element_title", ""),
                         "data_element_description": de.get("data_element_description", ""),
                         "data_owner": de.get("data_owner", ""),
                         "legal_basis": de.get("legal_basis", False),
