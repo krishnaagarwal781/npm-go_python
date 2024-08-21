@@ -173,6 +173,7 @@ async def post_consent_preference(
             content={
                 "message": "Consent preferences updated successfully",
                 "agreement_id": agreement_id,
+                "consent_artifact": consent_document,
             }
         )
     except Exception as e:
