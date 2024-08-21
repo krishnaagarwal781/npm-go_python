@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, APIRouter, Request
+from fastapi import FastAPI, HTTPException, Header, APIRouter, Request, Query
 from fastapi.responses import JSONResponse
 from bson import ObjectId
 from datetime import datetime, timedelta
@@ -173,7 +173,146 @@ async def post_consent_preference(
             content={
                 "message": "Consent preferences updated successfully",
                 "agreement_id": agreement_id,
+                "consent_artifact": consent_document,
             }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@consentRouter.get("/get-preferences", tags=["Consent Preference"])
+async def get_preferences(
+    dp_id: str = Query(..., description="Data Principal ID"),
+    df_id: str = Query(..., description="Data Fiduciary ID"),
+) -> List[Dict]:
+    # Query the consent preferences collection
+    documents = list(
+        consent_preferences_collection.find({"dp_id": dp_id, "df_id": df_id})
+    )
+
+    if not documents:
+        raise HTTPException(
+            status_code=404, detail="No preferences found for the given IDs"
+        )
+
+    # Collect all unique purpose_ids
+    purpose_ids = set()
+    for doc in documents:
+        consent_scope = (
+            doc.get("consent_document", {}).get("consent", {}).get("consent_scope", [])
+        )
+        for scope in consent_scope:
+            for consent in scope.get("consents", []):
+                purpose_ids.add(consent.get("purpose_id"))
+
+    # Query the collection points collection for purpose descriptions
+    purpose_descriptions = {}
+    if purpose_ids:
+        # Fetch the collection points document based on cp_id
+        collection_point = collection_point_collection.find_one(
+            {"_id": ObjectId(documents[0]["cp_id"])}
+        )
+        data_elements = collection_point.get("data_elements", [])
+        for element in data_elements:
+            purposes = element.get("purposes", [])
+            for purpose in purposes:
+                if purpose["purpose_id"] in purpose_ids:
+                    purpose_descriptions[purpose["purpose_id"]] = purpose[
+                        "purpose_description"
+                    ]
+
+    # Transform documents into the desired format
+    result = []
+    for doc in documents:
+        consent_document = doc.get("consent_document", {})
+        consent_scope = consent_document.get("consent", {}).get("consent_scope", [])
+
+        for scope in consent_scope:
+            for consent in scope.get("consents", []):
+                purpose_description = purpose_descriptions.get(
+                    consent.get("purpose_id"), "Unknown purpose"
+                )
+
+                consent_data = {
+                    "name": next(
+                        (
+                            e.get("data_element_title", "")
+                            for e in collection_point.get("data_elements", [])
+                            if e.get("data_element") == scope.get("data_element")
+                        ),
+                        "",
+                    ),
+                    "description": {
+                        "activity": purpose_description,  # Set activity to purpose_description
+                        "consent": consent.get("consent_timestamp", ""),
+                        "validTill": consent.get("expiry_date", ""),
+                        "agreement": consent_document.get("consent", {}).get(
+                            "agreement_id", ""
+                        ),
+                        "retentionTill": consent.get("retention_date", ""),
+                        "consent_status": consent.get("consent_status", ""),
+                        "consent_id": consent.get("purpose_id", ""),
+                        "revokedDate": consent.get(
+                            "revoked_date", ""
+                        ),  # Include revoked_date
+                    },
+                }
+                result.append(consent_data)
+
+    return result
+
+
+@consentRouter.post("/revoke-consent", tags=["Consent Preference"])
+async def revoke_consent(
+    dp_id: str = Query(..., description="Data Principal ID"),
+    df_id: str = Query(..., description="Data Fiduciary ID"),
+    consent_id: str = Query(..., description="Consent ID to Revoke"),
+):
+    try:
+        # Find the document that matches the dp_id and df_id
+        document = consent_preferences_collection.find_one(
+            {"dp_id": dp_id, "df_id": df_id}
+        )
+
+        if not document:
+            raise HTTPException(
+                status_code=404, detail="No consent preferences found for the given IDs"
+            )
+
+        consent_scope = (
+            document.get("consent_document", {})
+            .get("consent", {})
+            .get("consent_scope", [])
+        )
+        consent_updated = False
+
+        # Iterate through consent scopes and update the consent status
+        for scope in consent_scope:
+            for consent in scope.get("consents", []):
+                if consent.get("purpose_id") == consent_id:
+                    consent["consent_status"] = False
+                    consent["revoked_date"] = (
+                        datetime.utcnow().isoformat()
+                    )  # Set revoked_date
+                    consent_updated = True
+
+        if not consent_updated:
+            raise HTTPException(
+                status_code=404, detail="Consent ID not found in the given preferences"
+            )
+
+        # Update the document in the collection
+        update_result = consent_preferences_collection.update_one(
+            {"dp_id": dp_id, "df_id": df_id},
+            {"$set": {"consent_document.consent.consent_scope": consent_scope}},
+        )
+
+        if update_result.modified_count == 0:
+            raise HTTPException(
+                status_code=500, detail="Failed to update consent preferences"
+            )
+
+        return {"detail": "Consent successfully revoked"}
+
+    except WriteError as e:
+        raise HTTPException(status_code=500, detail=f"Database write error: {str(e)}")
