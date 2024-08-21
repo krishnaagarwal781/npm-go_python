@@ -17,7 +17,7 @@ import hashlib
 import json
 from typing import Dict, Any
 from uuid import uuid4
-
+from collections import defaultdict
 consentRouter = APIRouter()
 
 # Initialize RedisStorage and Limiter
@@ -184,7 +184,7 @@ async def post_consent_preference(
 async def get_preferences(
     dp_id: str = Query(..., description="Data Principal ID"),
     df_id: str = Query(..., description="Data Fiduciary ID"),
-) -> List[Dict]:
+) -> Dict[str, List[Dict]]:
     # Query the consent preferences collection
     documents = list(
         consent_preferences_collection.find({"dp_id": dp_id, "df_id": df_id})
@@ -221,29 +221,31 @@ async def get_preferences(
                         "purpose_description"
                     ]
 
-    # Transform documents into the desired format
-    result = []
+    # Transform documents into the desired format and group by 'name'
+    grouped_result = defaultdict(list)
     for doc in documents:
         consent_document = doc.get("consent_document", {})
         consent_scope = consent_document.get("consent", {}).get("consent_scope", [])
 
         for scope in consent_scope:
+            data_element_title = next(
+                (
+                    e.get("data_element_title", "")
+                    for e in collection_point.get("data_elements", [])
+                    if e.get("data_element") == scope.get("data_element")
+                ),
+                "",
+            )
+
             for consent in scope.get("consents", []):
                 purpose_description = purpose_descriptions.get(
                     consent.get("purpose_id"), "Unknown purpose"
                 )
 
                 consent_data = {
-                    "name": next(
-                        (
-                            e.get("data_element_title", "")
-                            for e in collection_point.get("data_elements", [])
-                            if e.get("data_element") == scope.get("data_element")
-                        ),
-                        "",
-                    ),
+                    "name": data_element_title,
                     "description": {
-                        "activity": purpose_description,  # Set activity to purpose_description
+                        "activity": purpose_description,
                         "consent": consent.get("consent_timestamp", ""),
                         "validTill": consent.get("expiry_date", ""),
                         "agreement": consent_document.get("consent", {}).get(
@@ -252,12 +254,13 @@ async def get_preferences(
                         "retentionTill": consent.get("retention_date", ""),
                         "consent_status": consent.get("consent_status", ""),
                         "consent_id": consent.get("purpose_id", ""),
-                        "revokedDate": consent.get(
-                            "revoked_date", ""
-                        ),  # Include revoked_date
+                        "revokedDate": consent.get("revoked_date", ""),
                     },
                 }
-                result.append(consent_data)
+                grouped_result[data_element_title].append(consent_data)
+
+    # Convert the grouped result to the final format
+    result = {name: consents for name, consents in grouped_result.items()}
 
     return result
 
