@@ -179,6 +179,79 @@ async def post_consent_preference(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# @consentRouter.get("/get-preferences", tags=["Consent Preference"])
+# async def get_preferences(
+#     dp_id: str = Query(..., description="Data Principal ID"),
+#     df_id: str = Query(..., description="Data Fiduciary ID"),
+# ) -> Dict[str, List[Dict]]:
+#     # Query the consent preferences collection
+#     documents = list(
+#         consent_preferences_collection.find({"dp_id": dp_id, "df_id": df_id})
+#     )
+
+#     if not documents:
+#         raise HTTPException(
+#             status_code=404, detail="No preferences found for the given IDs"
+#         )
+
+#     # Collect all unique cp_ids from the documents
+#     cp_ids = {doc["cp_id"] for doc in documents}
+
+#     # Query the collection points collection for all relevant collection points
+#     collection_points = list(
+#         collection_point_collection.find({"_id": {"$in": [ObjectId(cp_id) for cp_id in cp_ids]}})
+#     )
+
+#     # Create a mapping from data_element to its title and purposes
+#     data_element_mapping = {}
+#     for collection_point in collection_points:
+#         for element in collection_point.get("data_elements", []):
+#             data_element_mapping[element["data_element"]] = {
+#                 "title": element.get("data_element_title", "Unknown data element"),
+#                 "purposes": {purpose["purpose_id"]: purpose["purpose_description"] for purpose in element.get("purposes", [])}
+#             }
+
+#     # Transform documents into the desired format and group by 'name'
+#     grouped_result = defaultdict(list)
+#     for doc in documents:
+#         consent_document = doc.get("consent_document", {})
+#         consent_scope = consent_document.get("consent", {}).get("consent_scope", [])
+
+#         for scope in consent_scope:
+#             data_element_key = scope.get("data_element")
+#             data_element_info = data_element_mapping.get(data_element_key, {})
+
+#             data_element_title = data_element_info.get("title", "Unknown data element")
+#             purpose_descriptions = data_element_info.get("purposes", {})
+
+#             for consent in scope.get("consents", []):
+#                 purpose_description = purpose_descriptions.get(
+#                     consent.get("purpose_id"), "Unknown purpose"
+#                 )
+
+#                 consent_data = {
+#                     "cp_name": consent_document.get("consent", {}).get("cp_name", ""),
+#                     "de_name": data_element_title,
+#                     "description": {
+#                         "activity": purpose_description,
+#                         "consent": consent.get("consent_timestamp", ""),
+#                         "validTill": consent.get("expiry_date", ""),
+#                         "agreement": consent_document.get("consent", {}).get(
+#                             "agreement_id", ""
+#                         ),
+#                         "retentionTill": consent.get("retention_date", ""),
+#                         "consent_status": consent.get("consent_status", ""),
+#                         "consent_id": consent.get("purpose_id", ""),
+#                         "revokedDate": consent.get("revoked_date", ""),
+#                     },
+#                 }
+#                 grouped_result[data_element_title].append(consent_data)
+
+#     # Convert the grouped result to the final format
+#     result = {name: consents for name, consents in grouped_result.items()}
+
+#     return result
+
 @consentRouter.get("/get-preferences", tags=["Consent Preference"])
 async def get_preferences(
     dp_id: str = Query(..., description="Data Principal ID"),
@@ -202,13 +275,15 @@ async def get_preferences(
         collection_point_collection.find({"_id": {"$in": [ObjectId(cp_id) for cp_id in cp_ids]}})
     )
 
-    # Create a mapping from data_element to its title and purposes
-    data_element_mapping = {}
+    # Create a mapping from cp_id and data_element to its title and purposes
+    cp_data_element_mapping = {}
     for collection_point in collection_points:
+        cp_id_str = str(collection_point["_id"])
         for element in collection_point.get("data_elements", []):
-            data_element_mapping[element["data_element"]] = {
+            purposes = {purpose["purpose_id"]: purpose["purpose_description"] for purpose in element.get("purposes", [])}
+            cp_data_element_mapping[(cp_id_str, element["data_element"])] = {
                 "title": element.get("data_element_title", "Unknown data element"),
-                "purposes": {purpose["purpose_id"]: purpose["purpose_description"] for purpose in element.get("purposes", [])}
+                "purposes": purposes
             }
 
     # Transform documents into the desired format and group by 'name'
@@ -218,15 +293,23 @@ async def get_preferences(
         consent_scope = consent_document.get("consent", {}).get("consent_scope", [])
 
         for scope in consent_scope:
+            cp_id = doc["cp_id"]
             data_element_key = scope.get("data_element")
-            data_element_info = data_element_mapping.get(data_element_key, {})
+
+            # Try to fetch data using both cp_id and data_element
+            data_element_info = cp_data_element_mapping.get(
+                (cp_id, data_element_key), 
+                {"title": "Unknown data element", "purposes": {}}
+            )
 
             data_element_title = data_element_info.get("title", "Unknown data element")
             purpose_descriptions = data_element_info.get("purposes", {})
 
             for consent in scope.get("consents", []):
+                purpose_id = consent.get("purpose_id")
                 purpose_description = purpose_descriptions.get(
-                    consent.get("purpose_id"), "Unknown purpose"
+                    purpose_id, 
+                    f"Unknown purpose (ID: {purpose_id})"
                 )
 
                 consent_data = {
@@ -236,12 +319,10 @@ async def get_preferences(
                         "activity": purpose_description,
                         "consent": consent.get("consent_timestamp", ""),
                         "validTill": consent.get("expiry_date", ""),
-                        "agreement": consent_document.get("consent", {}).get(
-                            "agreement_id", ""
-                        ),
+                        "agreement": consent_document.get("consent", {}).get("agreement_id", ""),
                         "retentionTill": consent.get("retention_date", ""),
                         "consent_status": consent.get("consent_status", ""),
-                        "consent_id": consent.get("purpose_id", ""),
+                        "consent_id": purpose_id,
                         "revokedDate": consent.get("revoked_date", ""),
                     },
                 }
@@ -251,7 +332,6 @@ async def get_preferences(
     result = {name: consents for name, consents in grouped_result.items()}
 
     return result
-
 
 
 @consentRouter.post("/revoke-consent", tags=["Consent Preference"])
