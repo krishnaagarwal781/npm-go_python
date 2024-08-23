@@ -1,7 +1,7 @@
 from pymongo import MongoClient
 
 client = MongoClient(
-    "mongodb+srv://concur-admin:oApIL0eGKTzHeWrn@concur-backend-db.3jzk7uh.mongodb.net"
+    "mongodb://gewgawrav:catax1234@concur.cumulate.live"
 )
 db = client["python-sdk"]
 developer_details_collection = db["developer_details"]
