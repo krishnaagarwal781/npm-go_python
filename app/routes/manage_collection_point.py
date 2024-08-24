@@ -4,7 +4,12 @@ from bson import ObjectId
 import datetime
 import secrets
 import yaml
-from app.config.db import collection_point_collection, developer_details_collection, translated_data_element_collection, consent_directory_languages_collection
+from app.config.db import (
+    collection_point_collection,
+    developer_details_collection,
+    translated_data_element_collection,
+    consent_directory_languages_collection,
+)
 from app.models.models import CollectionPointRequest
 from app.schemas.utils import save_data_to_concur
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -37,7 +42,7 @@ async def create_collection_point(
     )
     if not organisation:
         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
-    
+
         # Assign purpose_id to each purpose before processing
     for de in data.data_elements:
         for purpose in de.purposes:
@@ -66,6 +71,28 @@ async def create_collection_point(
                         "purpose_id": purpose.purpose_id,
                         "purpose_description": purpose.purpose_description,
                         "purpose_language": purpose.purpose_language,
+                        "purpose_expiry": de.expiry,
+                        "purpose_retention": de.retention_period,
+                        "purpose_mandatory": False,
+                        "purpose_revokable": False,
+                        "purpose_encrypted": False,
+                        "purpose_cross_border": False,
+                        "purpose_shared": False,
+                    }
+                    for purpose in de.purposes
+                ],
+                "purposes_markdown": [
+                    {
+                        "purpose_id": purpose.purpose_id,
+                        "purpose_description": purpose.purpose_description,
+                        "purpose_language": purpose.purpose_language,
+                        "purpose_expiry": de.expiry,
+                        "purpose_retention": de.retention_period,
+                        "purpose_mandatory": False,
+                        "purpose_revokable": False,
+                        "purpose_encrypted": False,
+                        "purpose_cross_border": False,
+                        "purpose_shared": False,
                     }
                     for purpose in de.purposes
                 ],
@@ -96,17 +123,21 @@ async def create_collection_point(
         )
 
     for de in data.data_elements:
-        #saving data for translation
+        # saving data for translation
         all_languages = list(consent_directory_languages_collection.find())
         translated_element_structure = []
         for lang in all_languages:
-            translated_element_structure.append({
-                "lang_title": lang["lang_title"],
-                "lang_display": lang["lang_display"],
-                "lang_short_code": lang["lang_short_code"],
-                "translation_symbol": lang["translation_symbol"],
-                "data_element_concur_name": de.data_element_title if lang["lang_short_code"] == "en" else "",
-            })
+            translated_element_structure.append(
+                {
+                    "lang_title": lang["lang_title"],
+                    "lang_display": lang["lang_display"],
+                    "lang_short_code": lang["lang_short_code"],
+                    "translation_symbol": lang["translation_symbol"],
+                    "data_element_concur_name": (
+                        de.data_element_title if lang["lang_short_code"] == "en" else ""
+                    ),
+                }
+            )
         translated_data_element_payload = {
             "cp_id": cp_id,
             "translated_elements": translated_element_structure,
@@ -114,17 +145,27 @@ async def create_collection_point(
         }
 
         try:
-            translated_data_element_id = translated_data_element_collection.insert_one(translated_data_element_payload).inserted_id
+            translated_data_element_id = translated_data_element_collection.insert_one(
+                translated_data_element_payload
+            ).inserted_id
             collection_point_collection.update_one(
-                {"_id": cp_result.inserted_id, "data_elements.data_element": de.data_element},
-                {"$set": {"data_elements.$.translated_data_element_id": str(translated_data_element_id)}},
+                {
+                    "_id": cp_result.inserted_id,
+                    "data_elements.data_element": de.data_element,
+                },
+                {
+                    "$set": {
+                        "data_elements.$.translated_data_element_id": str(
+                            translated_data_element_id
+                        )
+                    }
+                },
             )
         except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to insert translated data element details: {str(e)}",
             )
-
 
     for de in data.data_elements:
         payload = {
@@ -177,7 +218,9 @@ async def create_collection_point(
     try:
         api_url = "https://consent-foundation.adnan-qasim.me/add-purpose"
         api_headers = {"Content-Type": "application/json"}
-        api_response = requests.post(api_url, json=purposes_payload, headers=api_headers)
+        api_response = requests.post(
+            api_url, json=purposes_payload, headers=api_headers
+        )
         api_response.raise_for_status()
 
         # Extract the inserted_ids from the response
@@ -187,7 +230,7 @@ async def create_collection_point(
         if not inserted_ids or len(inserted_ids) != len(purpose_idx_map):
             raise HTTPException(
                 status_code=500,
-                detail="Mismatch in number of translated_purpose_ids returned from the consent directory"
+                detail="Mismatch in number of translated_purpose_ids returned from the consent directory",
             )
 
         # Update the collection_point_collection with translated_purpose_id
@@ -202,7 +245,7 @@ async def create_collection_point(
                     "$set": {
                         f"data_elements.{de_idx}.purposes.{purpose_idx}.translated_purpose_id": inserted_id,
                     }
-                }
+                },
             )
 
     except requests.RequestException as e:
@@ -234,6 +277,13 @@ async def create_collection_point(
                         "purpose_id": purpose.purpose_id,
                         "purpose_description": purpose.purpose_description,
                         "purpose_language": purpose.purpose_language,
+                        "purpose_expiry": de.expiry,
+                        "purpose_retention": de.retention_period,
+                        "purpose_mandatory": False,
+                        "purpose_revokable": False,
+                        "purpose_encrypted": False,
+                        "purpose_cross_border": False,
+                        "purpose_shared": False,
                     }
                     for purpose in de.purposes
                 ],
@@ -249,131 +299,6 @@ async def create_collection_point(
         }
     )
 
-
-# @collectionRouter.post("/push-yaml", tags=["Collection Point Management"])
-# @limiter.limit("5/minute")
-# async def push_yaml(
-#     request: Request,
-#     yaml_file: UploadFile = File(...),
-#     org_id: str = Header(...),
-#     app_id: str = Header(...),
-#     org_key: str = Header(...),
-#     org_secret: str = Header(...),
-# ):
-#     # Validate the organization credentials
-#     organisation = developer_details_collection.find_one(
-#         {"organisation_id": org_id, "org_key": org_key, "org_secret": org_secret}
-#     )
-#     if not organisation:
-#         raise HTTPException(status_code=401, detail="Invalid org_key or org_secret")
-
-#     try:
-#         yaml_data = yaml.safe_load(yaml_file.file)
-#     except yaml.YAMLError as exc:
-#         raise HTTPException(status_code=400, detail=f"Invalid YAML file: {exc}")
-
-#     if not yaml_data.get("applications"):
-#         raise HTTPException(
-#             status_code=400, detail="No applications found in YAML file"
-#         )
-
-#     updated_count = 0
-
-#     for application in yaml_data.get("applications", []):
-#         if application.get("application_id") == app_id:
-#             for cp_details in application.get("collection_points_data", []):
-#                 cp_id = cp_details.get("cp_id")
-#                 if cp_id:
-#                     existing_cp = collection_point_collection.find_one(
-#                         {"_id": ObjectId(cp_id)}
-#                     )
-#                     if existing_cp:
-#                         # Process purposes to assign new purpose_id if needed
-#                         new_data_elements = []
-#                         for de in cp_details.get("data_elements", []):
-#                             new_purposes = []
-#                             for purpose in de.get("purposes", []):
-#                                 if not purpose.get("purpose_id"):
-#                                     purpose["purpose_id"] = secrets.token_hex(8)
-#                                 new_purposes.append(purpose)
-#                             new_de = de.copy()
-#                             new_de["purposes"] = new_purposes
-#                             new_data_elements.append(new_de)
-
-#                         update_result = collection_point_collection.update_one(
-#                             {"_id": ObjectId(cp_id)},
-#                             {
-#                                 "$set": {
-#                                     "cp_name": cp_details.get(
-#                                         "cp_name", existing_cp.get("cp_name")
-#                                     ),
-#                                     "cp_status": cp_details.get(
-#                                         "cp_status", existing_cp.get("cp_status")
-#                                     ),
-#                                     "cp_url": cp_details.get(
-#                                         "cp_url", existing_cp.get("cp_url")
-#                                     ),
-#                                     "data_elements": new_data_elements,
-#                                 }
-#                             },
-#                         )
-#                         if update_result.modified_count > 0:
-#                             updated_count += 1
-#                     else:
-#                         raise HTTPException(
-#                             status_code=404,
-#                             detail=f"Collection point {cp_id} not found",
-#                         )
-#                 else:
-#                     raise HTTPException(
-#                         status_code=400,
-#                         detail="collection_point_id is required for each collection point",
-#                     )
-
-#     if updated_count == 0:
-#         raise HTTPException(
-#             status_code=500,
-#             detail="No collection points were updated",
-#         )
-
-#     # Fetch the updated data from MongoDB
-#     updated_collection_points = list(
-#         collection_point_collection.find({"org_id": org_id, "application_id": app_id})
-#     )
-
-#     # Convert updated data to YAML format
-#     updated_yaml_data = {
-#         "version": "1.0",
-#         "organisation_id": org_id,
-#         "applications": [
-#             {
-#                 "application_id": app_id,
-#                 "type": application.get("type", ""),
-#                 "name": application.get("name", ""),
-#                 "stage": application.get("stage", ""),
-#                 "application_user": application.get("application_user", ""),
-#                 "collection_points_data": [
-#                     {
-#                         "cp_id": str(cp["_id"]),
-#                         "cp_name": cp.get("cp_name", ""),
-#                         "cp_status": cp.get("cp_status", ""),
-#                         "cp_url": cp.get("cp_url", ""),
-#                         "data_elements": cp.get("data_elements", []),
-#                     }
-#                     for cp in updated_collection_points
-#                 ],
-#             }
-#             for application in yaml_data.get("applications", [])
-#             if application.get("application_id") == app_id
-#         ],
-#     }
-
-#     return JSONResponse(
-#         content={
-#             "message": f"YAML file updated successfully, {updated_count} collection points updated",
-#             "updated_yaml_data": updated_yaml_data,
-#         }
-#     ) 
 
 @collectionRouter.post("/push-yaml", tags=["Collection Point Management"])
 @limiter.limit("5/minute")
@@ -422,15 +347,19 @@ async def push_yaml(
                         }
 
                         purpose_idx_map = {}
-                        for de_idx, de in enumerate(cp_details.get("data_elements", [])):
+                        for de_idx, de in enumerate(
+                            cp_details.get("data_elements", [])
+                        ):
                             new_purposes = []
                             for idx, purpose in enumerate(de.get("purposes", [])):
                                 if not purpose.get("purpose_id"):
                                     purpose["purpose_id"] = secrets.token_hex(8)
-                                purposes_payload["purpose"].append({
-                                    "description": purpose["purpose_description"],
-                                    "lang_short_code": purpose["purpose_language"],
-                                })
+                                purposes_payload["purpose"].append(
+                                    {
+                                        "description": purpose["purpose_description"],
+                                        "lang_short_code": purpose["purpose_language"],
+                                    }
+                                )
                                 purpose_idx_map[purpose["purpose_id"]] = (de_idx, idx)
                                 new_purposes.append(purpose)
                             new_de = de.copy()
@@ -439,25 +368,35 @@ async def push_yaml(
 
                         # Push purposes to the consent directory
                         try:
-                            api_url = "https://consent-foundation.adnan-qasim.me/add-purpose"
+                            api_url = (
+                                "https://consent-foundation.adnan-qasim.me/add-purpose"
+                            )
                             api_headers = {"Content-Type": "application/json"}
-                            api_response = requests.post(api_url, json=purposes_payload, headers=api_headers)
+                            api_response = requests.post(
+                                api_url, json=purposes_payload, headers=api_headers
+                            )
                             api_response.raise_for_status()
 
                             # Extract the inserted_ids from the response
                             api_response_data = api_response.json()
                             inserted_ids = api_response_data.get("inserted_ids", [])
 
-                            if not inserted_ids or len(inserted_ids) != len(purpose_idx_map):
+                            if not inserted_ids or len(inserted_ids) != len(
+                                purpose_idx_map
+                            ):
                                 raise HTTPException(
                                     status_code=500,
-                                    detail="Mismatch in number of translated_purpose_ids returned from the consent directory"
+                                    detail="Mismatch in number of translated_purpose_ids returned from the consent directory",
                                 )
 
                             # Update the collection_point_collection with translated_purpose_id
-                            for purpose_id, inserted_id in zip(purpose_idx_map.keys(), inserted_ids):
+                            for purpose_id, inserted_id in zip(
+                                purpose_idx_map.keys(), inserted_ids
+                            ):
                                 de_idx, purpose_idx = purpose_idx_map[purpose_id]
-                                new_data_elements[de_idx]["purposes"][purpose_idx]["translated_purpose_id"] = inserted_id
+                                new_data_elements[de_idx]["purposes"][purpose_idx][
+                                    "translated_purpose_id"
+                                ] = inserted_id
 
                         except requests.RequestException as e:
                             raise HTTPException(
@@ -466,17 +405,27 @@ async def push_yaml(
                             )
 
                         # Now, handle translations for each data element
-                        all_languages = list(consent_directory_languages_collection.find())
+                        all_languages = list(
+                            consent_directory_languages_collection.find()
+                        )
                         for de_idx, de in enumerate(new_data_elements):
                             translated_element_structure = []
                             for lang in all_languages:
-                                translated_element_structure.append({
-                                    "lang_title": lang["lang_title"],
-                                    "lang_display": lang["lang_display"],
-                                    "lang_short_code": lang["lang_short_code"],
-                                    "translation_symbol": lang["translation_symbol"],
-                                    "data_element_concur_name": de["data_element_title"] if lang["lang_short_code"] == "en" else "",
-                                })
+                                translated_element_structure.append(
+                                    {
+                                        "lang_title": lang["lang_title"],
+                                        "lang_display": lang["lang_display"],
+                                        "lang_short_code": lang["lang_short_code"],
+                                        "translation_symbol": lang[
+                                            "translation_symbol"
+                                        ],
+                                        "data_element_concur_name": (
+                                            de["data_element_title"]
+                                            if lang["lang_short_code"] == "en"
+                                            else ""
+                                        ),
+                                    }
+                                )
 
                             translated_data_element_payload = {
                                 "cp_id": cp_id,
@@ -485,12 +434,29 @@ async def push_yaml(
                             }
 
                             try:
-                                translated_data_element_id = translated_data_element_collection.insert_one(translated_data_element_payload).inserted_id
-                                new_data_elements[de_idx]["translated_data_element_id"] = str(translated_data_element_id)
+                                translated_data_element_id = (
+                                    translated_data_element_collection.insert_one(
+                                        translated_data_element_payload
+                                    ).inserted_id
+                                )
+                                new_data_elements[de_idx][
+                                    "translated_data_element_id"
+                                ] = str(translated_data_element_id)
 
                                 collection_point_collection.update_one(
-                                    {"_id": ObjectId(cp_id), "data_elements.data_element": de["data_element"]},
-                                    {"$set": {"data_elements.$.translated_data_element_id": str(translated_data_element_id)}},
+                                    {
+                                        "_id": ObjectId(cp_id),
+                                        "data_elements.data_element": de[
+                                            "data_element"
+                                        ],
+                                    },
+                                    {
+                                        "$set": {
+                                            "data_elements.$.translated_data_element_id": str(
+                                                translated_data_element_id
+                                            )
+                                        }
+                                    },
                                 )
                             except Exception as e:
                                 raise HTTPException(
@@ -572,7 +538,6 @@ async def push_yaml(
             "updated_yaml_data": updated_yaml_data,
         }
     )
-
 
 
 @collectionRouter.delete(
