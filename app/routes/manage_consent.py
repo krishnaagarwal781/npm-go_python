@@ -179,6 +179,7 @@ async def post_consent_preference(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @consentRouter.get("/get-preferences", tags=["Consent Preference"])
 async def get_preferences(
     dp_id: str = Query(..., description="Data Principal ID"),
@@ -263,9 +264,11 @@ async def get_preferences(
 
 @consentRouter.post("/revoke-consent", tags=["Consent Preference"])
 async def revoke_consent(
+    request: Request,
     dp_id: str = Query(..., description="Data Principal ID"),
     df_id: str = Query(..., description="Data Fiduciary ID"),
     consent_id: str = Query(..., description="Consent ID to Revoke"),
+    consent_status: bool = Query(..., description="Consent Status"),
 ):
     try:
         # Find the document that matches the dp_id and df_id
@@ -289,27 +292,93 @@ async def revoke_consent(
         for scope in consent_scope:
             for consent in scope.get("consents", []):
                 if consent.get("purpose_id") == consent_id:
-                    consent["consent_status"] = False
-                    consent["revoked_date"] = (
-                        datetime.utcnow().isoformat()
-                    )  # Set revoked_date
+
+                    if consent["consent_status"] == consent_status:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Consent status is already set to the given value"
+                        )
+                    
+                    if consent_status == False:
+                        consent["consent_status"] = False
+                        consent["revoked_date"] = (
+                            datetime.utcnow().isoformat()
+                        )  # Set revoked_date
+                    else:
+                        linked_agreement_id = document.get("consent_document", {}).get("consent", {}).get("agreement_id", "")
+
+                        consent["consent_status"] = True
+
+                        #updating the consent's expiry date
+                        current_expiry_date = datetime.fromisoformat(consent["expiry_date"])
+
+                        # Calculate new expiry date
+                        collection_point = collection_point_collection.find_one(
+                            {"_id": ObjectId(document.get("cp_id","")), "application_id": document.get("app_id","")}
+                        )
+                        if not collection_point:
+                            raise HTTPException(status_code=404, detail="Collection point not found")
+                        
+                        data_elements = collection_point.get("data_elements", [])
+                        matching_element = next(
+                            (e for e in data_elements if e["data_element"] == scope.get("data_element")),
+                            None,
+                        )
+                        if matching_element:
+                            expiry_days = matching_element.get("expiry", 0)
+                            new_expiry_date = calculate_future_date(current_expiry_date, expiry_days)
+
+                            consent["expiry_date"] = new_expiry_date
+
+                        document["consent_document"]["consent"]["linked_agreement"] = linked_agreement_id
+
+                        # Generate hash for consent_document
+                        consent_hash = generate_body_hash(document["consent_document"])
+                        document["consent_document"]["consent"]["agreement_hash_id"] = consent_hash
+
+                        document["_id"] = str(document["_id"])
+                        if "cp_id" in document:
+                            document["cp_id"] = str(document["cp_id"])
+
+                        # Save request headers and body in user_consent_headers collection
+                        body_hash = generate_body_hash(document)
+                        user_consent_document = {
+                            "headers": dict(request.headers),
+                            "body": document,
+                            "body_hash": body_hash,
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+
+                        # Insert document and get inserted ID
+                        user_consent_result = user_consent_headers.insert_one(user_consent_document)
+                        user_consent_id = user_consent_result.inserted_id
+
+                        # Interact with blockchain or similar service to get agreement_id
+                        agreement_id = harsh_blockchain_functionationing(document["consent_document"])
+                        document["consent_document"]["consent"]["agreement_id"] = agreement_id
+
+                        document["user_consent_request_id"] = str(user_consent_id)
+
+                        consent_preferences_collection.insert_one(document)
+                        
+
                     consent_updated = True
 
         if not consent_updated:
             raise HTTPException(
                 status_code=404, detail="Consent ID not found in the given preferences"
             )
-
+        if consent_status == False:
         # Update the document in the collection
-        update_result = consent_preferences_collection.update_one(
-            {"dp_id": dp_id, "df_id": df_id},
-            {"$set": {"consent_document.consent.consent_scope": consent_scope}},
-        )
-
-        if update_result.modified_count == 0:
-            raise HTTPException(
-                status_code=500, detail="Failed to update consent preferences"
+            update_result = consent_preferences_collection.update_one(
+                {"dp_id": dp_id, "df_id": df_id},
+                {"$set": {"consent_document.consent.consent_scope": consent_scope}},
             )
+
+            if update_result.modified_count == 0:
+                raise HTTPException(
+                    status_code=500, detail="Failed to update consent preferences"
+                )
 
         return {"detail": "Consent successfully revoked"}
 
