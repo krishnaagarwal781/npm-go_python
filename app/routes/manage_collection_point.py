@@ -78,6 +78,7 @@ async def create_collection_point(
                         "purpose_encrypted": False,
                         "purpose_cross_border": False,
                         "purpose_shared": False,
+                        "purpose_legal": False,
                     }
                     for purpose in de.purposes
                 ],
@@ -93,6 +94,7 @@ async def create_collection_point(
                         "purpose_encrypted": False,
                         "purpose_cross_border": False,
                         "purpose_shared": False,
+                        "purpose_legal": False,
                     }
                     for purpose in de.purposes
                 ],
@@ -284,6 +286,7 @@ async def create_collection_point(
                         "purpose_encrypted": False,
                         "purpose_cross_border": False,
                         "purpose_shared": False,
+                        "purpose_legal": False,
                     }
                     for purpose in de.purposes
                 ],
