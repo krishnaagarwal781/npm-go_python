@@ -14,13 +14,6 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from limits.storage import RedisStorage
 
-import redis
-import json
-
-r = redis.Redis(
-  host='redis-12042.c212.ap-south-1-1.ec2.redns.redis-cloud.com',
-  port=12042,
-  password='XPArYXZ1ENkQyQv31JoRpjnqnV49rvjD')
 
 # Initialize RedisStorage and Limiter
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
@@ -40,15 +33,6 @@ async def get_notice_info(
     org_key: str = Header(...),
     org_secret: str = Header(...),
 ):
-    
-    cache_key = f"notice_info:{org_id}:{app_id}:{cp_id}"
-
-    # Try to retrieve the cached data from Redis
-    cached_notice_info =r.get(cache_key)
-    if cached_notice_info:
-        # Return the cached data
-        return JSONResponse(content=json.loads(cached_notice_info))
-    
 
     # Verify the organization
     organisation = developer_details_collection.find_one(
@@ -112,7 +96,6 @@ async def get_notice_info(
                     translated_purposes = consent_directory_collection.find_one(
                         {"_id": ObjectId(purpose.get("translated_purpose_id"))}
                     )
-
                     if translated_purposes:
                         for translated_purpose in translated_purposes.get("purpose", []):
                             # Filter purposes by language
@@ -134,8 +117,6 @@ async def get_notice_info(
                         if text.get("lang_title", "").lower() == notice_info[lang_key].get("lang_title", "").lower():
                             translated_text = text.get("data_element_concur_name", "")
                             break
-
-
                 data_elements.append(
                     {
                         "data_element": de.get("data_element", ""),
@@ -160,23 +141,5 @@ async def get_notice_info(
                 "cp_url": collection_point.get("cp_url", ""),
                 "data_elements": data_elements,
             }
-
-    # Check if all purpose_descriptions are non-empty
-    all_descriptions_filled = True
-    for lang_key in notice_info.keys():
-        if lang_key != "urls":
-            for data_element in notice_info[lang_key]["collection_point"]["data_elements"]:
-                for purpose in data_element["purposes"]:
-                    if not purpose["purpose_description"]:
-                        all_descriptions_filled = False
-                        break
-                if not all_descriptions_filled:
-                    break
-        if not all_descriptions_filled:
-            break
-
-    # Cache the result in Redis only if all purpose_descriptions are non-empty
-    if all_descriptions_filled:
-        r.set(cache_key, json.dumps(notice_info), ex=86400)  
 
     return {"notice_info": notice_info}
