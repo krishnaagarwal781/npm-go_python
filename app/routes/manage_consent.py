@@ -60,9 +60,7 @@ async def post_consent_preference(
     if not collection_point:
         raise HTTPException(status_code=404, detail="Collection point not found")
 
-    # Debug: Output collection point
     print(collection_point)
-
     # Step 2: Validate the provided data elements against the collection point's data elements
     data_elements_ids = {
         element["data_element"] for element in collection_point.get("data_elements", [])
@@ -95,9 +93,8 @@ async def post_consent_preference(
 
         if not collection_point_element:
             continue
-
         for consent in element.consents:
-            # Add the relevant fields from the collection point's purposes array
+            # Retrieve purpose details from the collection point
             purpose_details = next(
                 (
                     purpose
@@ -106,19 +103,38 @@ async def post_consent_preference(
                 ),
                 {},
             )
+
+            # Calculate purpose_expiry and purpose_retention
+            purpose_expiry_days = purpose_details.get("purpose_expiry")
+            purpose_retention_days = purpose_details.get("purpose_retention")
+            print(purpose_expiry_days)
+            print(purpose_retention_days)
+
             consent_scope[element.data_element]["consents"].append(
                 {
                     "purpose_id": consent.purpose_id,
                     "consent_status": consent.consent_status,
                     "purpose_shared": consent.shared,
                     "data_processors": consent.data_processors,
-                    "purpose_cross_border": purpose_details.get("purpose_cross_border"),
-                    "purpose_mandatory": purpose_details.get("purpose_mandatory"),
-                    "purpose_legal": purpose_details.get("purpose_legal"),
-                    "purpose_revokable": purpose_details.get("purpose_revokable"),
-                    "purpose_encrypted": purpose_details.get("purpose_encrypted"),
-                    "purpose_expiry": purpose_details.get("purpose_expiry"),
-                    "purpose_retention": purpose_details.get("purpose_retention"),
+                    "purpose_cross_border": purpose_details.get(
+                        "purpose_cross_border", False
+                    ),
+                    "purpose_mandatory": purpose_details.get(
+                        "purpose_mandatory", False
+                    ),
+                    "purpose_legal": purpose_details.get("purpose_legal", False),
+                    "purpose_revokable": purpose_details.get(
+                        "purpose_revokable", False
+                    ),
+                    "purpose_encrypted": purpose_details.get(
+                        "purpose_encrypted", False
+                    ),
+                    "purpose_expiry": calculate_future_date(
+                        datetime.utcnow(), purpose_expiry_days
+                    ),
+                    "purpose_retention": calculate_future_date(
+                        datetime.utcnow(), purpose_retention_days
+                    ),
                     "consent_timestamp": consent.consent_timestamp,
                 }
             )
