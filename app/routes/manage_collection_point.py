@@ -78,8 +78,8 @@ async def create_collection_point(
                             "mandatory_status": False,
                         },
                         "purpose_legal": {
-                            "lega_text": "",
-                            "lega_status": False,
+                            "legal_text": "",
+                            "legal_status": False,
                         },
                         "purpose_revokable": False,
                         "purpose_encrypted": False,
@@ -100,8 +100,8 @@ async def create_collection_point(
                             "mandatory_status": False,
                         },
                         "purpose_legal": {
-                            "lega_text": "",
-                            "lega_status": False,
+                            "legal_text": "",
+                            "legal_status": False,
                         },
                         "purpose_revokable": False,
                         "purpose_encrypted": False,
