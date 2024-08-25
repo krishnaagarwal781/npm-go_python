@@ -247,6 +247,7 @@ async def get_preferences(
                 )
 
                 consent_data = {
+                    "cp_id": cp_id,  # Include cp_id in the response
                     "cp_name": consent_document.get("consent", {}).get("cp_name", ""),
                     "de_name": data_element_title,
                     "description": {
