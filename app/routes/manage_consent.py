@@ -284,14 +284,18 @@ async def get_preferences(
                     "description": {
                         "activity": purpose_description,
                         "consent": consent.get("consent_timestamp", ""),
-                        "validTill": consent.get("expiry_date", ""),
+                        "validTill": consent.get("purpose_expiry", ""),
                         "agreement": consent_document.get("consent", {}).get(
                             "agreement_id", ""
                         ),
-                        "retentionTill": consent.get("retention_date", ""),
+                        "retentionTill": consent.get("purpose_retention", ""),
                         "consent_status": consent.get("consent_status", ""),
                         "consent_id": purpose_id,
                         "revokedDate": consent.get("revoked_date", ""),
+                        "purpose_mandatory": consent.get("purpose_mandatory", {}),
+                        "purpose_legal": consent.get("purpose_legal", {}),
+                        "purpose_revokable": consent.get("purpose_revokable", False),
+                        "purpose_shared": consent.get("purpose_shared", False),
                     },
                 }
                 grouped_result[data_element_title].append(consent_data)
