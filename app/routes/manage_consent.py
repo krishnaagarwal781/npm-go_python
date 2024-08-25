@@ -84,33 +84,40 @@ async def post_consent_preference(
             None,
         )
         if matching_element:
-            expiry_days = matching_element.get("expiry", 0)
-            retention_days = matching_element.get("retention_period", 0)
+            # Extract purposes
+            purposes = matching_element.get("purposes", [])
+            for purpose in purposes:
+                purpose_expiry_days = purpose.get("purpose_expiry", 0)
+                purpose_retention_days = purpose.get("purpose_retention", 0)
 
-            # Calculate dates
-            expiry_date = calculate_future_date(datetime.utcnow(), expiry_days)
-            retention_date = calculate_future_date(datetime.utcnow(), retention_days)
+                # Calculate dates based on purpose expiry and retention
+                expiry_date = calculate_future_date(datetime.utcnow(), purpose_expiry_days)
+                retention_date = calculate_future_date(datetime.utcnow(), purpose_retention_days)
 
-            consent_scope.append(
-                {
-                    "data_element": element.data_element,
-                    "consents": [
-                        {
-                            "purpose_id": consent.purpose_id,
-                            "consent_status": consent.consent_status,
-                            "shared": consent.shared,
-                            "data_processors": consent.data_processors,
-                            "cross_border": False,
-                            "encryption": None,
-                            "sensitive": None,
-                            "consent_timestamp": consent.consent_timestamp,
-                            "expiry_date": expiry_date,
-                            "retention_date": retention_date,
-                        }
-                        for consent in element.consents
-                    ],
-                }
-            )
+                consent_scope.append(
+                    {
+                        "data_element": element.data_element,
+                        "consents": [
+                            {
+                                "purpose_id": consent.purpose_id,
+                                "consent_status": consent.consent_status,
+                                "purpose_shared": consent.shared,
+                                "data_processors": consent.data_processors,
+                                **{
+                                    "purpose_cross_border": purpose.get("purpose_cross_border", False),
+                                    "purpose_mandatory": purpose.get("purpose_mandatory", False),
+                                    "purpose_legal": purpose.get("purpose_legal", False),
+                                    "purpose_revokable": purpose.get("purpose_revokable", False),
+                                    "purpose_encrypted": purpose.get("purpose_encrypted", None),
+                                    "purpose_expiry": expiry_date,
+                                    "purpose_retention": retention_date,
+                                },
+                                "consent_timestamp": consent.consent_timestamp,
+                            }
+                            for consent in element.consents
+                        ],
+                    }
+                )
 
     # Build consent document
     consent_document = {
