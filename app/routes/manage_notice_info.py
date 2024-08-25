@@ -59,7 +59,7 @@ async def get_notice_info(
             "arrowIcon": "https://cdn.icon-icons.com/icons2/2248/PNG/512/arrow_top_right_icon_135926.png",
             "mp3Link": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
             "dpar_link": "https://privacy-center.vercel.app/dparwebform",
-            "manage_consent_link": "http://localhost:3000/manage-consent",
+            "manage_consent_link": "http://localhost:3000/trust-bank/preference-center",
         }
     }
 
@@ -97,14 +97,47 @@ async def get_notice_info(
                         {"_id": ObjectId(purpose.get("translated_purpose_id"))}
                     )
                     if translated_purposes:
-                        for translated_purpose in translated_purposes.get("purpose", []):
+                        for translated_purpose in translated_purposes.get(
+                            "purpose", []
+                        ):
                             # Filter purposes by language
-                            if translated_purpose.get("lang_title", "").lower() == notice_info[lang_key].get("lang_title", "").lower():
+                            if (
+                                translated_purpose.get("lang_title", "").lower()
+                                == notice_info[lang_key].get("lang_title", "").lower()
+                            ):
                                 purposes.append(
                                     {
                                         "purpose_id": purpose.get("purpose_id", ""),
-                                        "purpose_description": translated_purpose.get("description", ""),
-                                        "purpose_language": translated_purpose.get("lang_title", ""),
+                                        "purpose_description": translated_purpose.get(
+                                            "description", ""
+                                        ),
+                                        "purpose_language": translated_purpose.get(
+                                            "lang_title", ""
+                                        ),
+                                        "pupose_expiry": purpose.get(
+                                            "purpose_expiry", ""
+                                        ),
+                                        "purpose_retention": purpose.get(
+                                            "purpose_retention", ""
+                                        ),
+                                        "purpose_mandatory": purpose.get(
+                                            "purpose_mandatory", ""
+                                        ),
+                                        "purpose_revokable": purpose.get(
+                                            "purpose_revokable", ""
+                                        ),
+                                        "purpose_encrypted": purpose.get(
+                                            "purpose_encrypted", ""
+                                        ),
+                                        "purpose_cross_border": purpose.get(
+                                            "purpose_cross_border", ""
+                                        ),
+                                        "purpose_shared": purpose.get(
+                                            "purpose_shared", ""
+                                        ),
+                                        "purpose_legal": purpose.get(
+                                            "purpose_legal", ""
+                                        ),
                                     }
                                 )
                 translated_data = translated_data_element_collection.find_one(
@@ -114,14 +147,23 @@ async def get_notice_info(
                 if translated_data:
                     for text in translated_data.get("translated_elements", []):
                         # Filter data elements by language
-                        if text.get("lang_title", "").lower() == notice_info[lang_key].get("lang_title", "").lower():
+                        if (
+                            text.get("lang_title", "").lower()
+                            == notice_info[lang_key].get("lang_title", "").lower()
+                        ):
                             translated_text = text.get("data_element_concur_name", "")
                             break
                 data_elements.append(
                     {
                         "data_element": de.get("data_element", ""),
-                        "data_element_title": translated_text if translated_text else de.get("data_element_title", ""),
-                        "data_element_description": de.get("data_element_description", ""),
+                        "data_element_title": (
+                            translated_text
+                            if translated_text
+                            else de.get("data_element_title", "")
+                        ),
+                        "data_element_description": de.get(
+                            "data_element_description", ""
+                        ),
                         "data_owner": de.get("data_owner", ""),
                         "legal_basis": de.get("legal_basis", False),
                         "retention_period": de.get("retention_period", 0),
