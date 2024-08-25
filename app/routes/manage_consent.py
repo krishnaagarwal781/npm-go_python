@@ -74,60 +74,47 @@ async def post_consent_preference(
                 detail=f"Invalid data_element: {element.data_element}",
             )
 
-    # Step 3: Construct the consent scope with calculated dates
-    consent_scope = []
+    # Step 3: Aggregate consents by data_element
+    consent_scope = {}
     for element in data.data_elements:
-        matching_element = next(
-            (
-                e
-                for e in collection_point.get("data_elements", [])
-                if e["data_element"] == element.data_element
-            ),
-            None,
+        if element.data_element not in consent_scope:
+            consent_scope[element.data_element] = {
+                "data_element": element.data_element,
+                "consents": []
+            }
+        
+        # Find the matching data element in the collection point
+        collection_point_element = next(
+            (el for el in collection_point['data_elements'] if el['data_element'] == element.data_element), 
+            None
         )
-        if matching_element:
-            purposes = matching_element.get("purposes", [])
-            for purpose in purposes:
-                # Calculate expiry and retention dates
-                expiry_date = calculate_future_date(
-                    datetime.utcnow(), purpose.get("purpose_expiry", 0)
-                )
-                retention_date = calculate_future_date(
-                    datetime.utcnow(), purpose.get("purpose_retention", 0)
-                )
+        
+        if not collection_point_element:
+            continue
 
-                consent_scope.append(
-                    {
-                        "data_element": element.data_element,
-                        "consents": [
-                            {
-                                "purpose_id": consent.purpose_id,
-                                "consent_status": consent.consent_status,
-                                "purpose_shared": consent.shared,
-                                "data_processors": consent.data_processors,
-                                **{
-                                    "purpose_cross_border": purpose.get(
-                                        "purpose_cross_border", False
-                                    ),
-                                    "purpose_mandatory": purpose.get(
-                                        "purpose_mandatory", {}
-                                    ),
-                                    "purpose_legal": purpose.get("purpose_legal", {}),
-                                    "purpose_revokable": purpose.get(
-                                        "purpose_revokable", False
-                                    ),
-                                    "purpose_encrypted": purpose.get(
-                                        "purpose_encrypted", None
-                                    ),
-                                    "purpose_expiry": expiry_date,
-                                    "purpose_retention": retention_date,
-                                },
-                                "consent_timestamp": consent.consent_timestamp,
-                            }
-                            for consent in element.consents
-                        ],
-                    }
-                )
+        for consent in element.consents:
+            # Add the relevant fields from the collection point's purposes array
+            purpose_details = next(
+                (purpose for purpose in collection_point_element['purposes'] if purpose['purpose_id'] == consent.purpose_id),
+                {}
+            )
+            consent_scope[element.data_element]["consents"].append({
+                "purpose_id": consent.purpose_id,
+                "consent_status": consent.consent_status,
+                "purpose_shared": consent.shared,
+                "data_processors": consent.data_processors,
+                "purpose_cross_border": purpose_details.get("purpose_cross_border"),
+                "purpose_mandatory": purpose_details.get("purpose_mandatory"),
+                "purpose_legal": purpose_details.get("purpose_legal"),
+                "purpose_revokable": purpose_details.get("purpose_revokable"),
+                "purpose_encrypted": purpose_details.get("purpose_encrypted"),
+                "purpose_expiry": purpose_details.get("purpose_expiry"),
+                "purpose_retention": purpose_details.get("purpose_retention"),
+                "consent_timestamp": consent.consent_timestamp,
+            })
+
+    # Convert the aggregated consent_scope to a list
+    consent_scope_list = list(consent_scope.values())
 
     # Step 4: Build the consent document
     consent_document = {
@@ -147,7 +134,7 @@ async def post_consent_preference(
                 "revocation_date": None,
             },
             "consent_language": data.consent_language,
-            "consent_scope": consent_scope,
+            "consent_scope": consent_scope_list,
             "timestamp": datetime.utcnow().isoformat(),
             "agreement_id": "",  # Placeholder to be updated
         },
@@ -198,7 +185,6 @@ async def post_consent_preference(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @consentRouter.get("/get-preferences", tags=["Consent Preference"])
 async def get_preferences(
