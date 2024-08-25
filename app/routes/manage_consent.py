@@ -80,38 +80,48 @@ async def post_consent_preference(
         if element.data_element not in consent_scope:
             consent_scope[element.data_element] = {
                 "data_element": element.data_element,
-                "consents": []
+                "consents": [],
             }
-        
+
         # Find the matching data element in the collection point
         collection_point_element = next(
-            (el for el in collection_point['data_elements'] if el['data_element'] == element.data_element), 
-            None
+            (
+                el
+                for el in collection_point["data_elements"]
+                if el["data_element"] == element.data_element
+            ),
+            None,
         )
-        
+
         if not collection_point_element:
             continue
 
         for consent in element.consents:
             # Add the relevant fields from the collection point's purposes array
             purpose_details = next(
-                (purpose for purpose in collection_point_element['purposes'] if purpose['purpose_id'] == consent.purpose_id),
-                {}
+                (
+                    purpose
+                    for purpose in collection_point_element["purposes"]
+                    if purpose["purpose_id"] == consent.purpose_id
+                ),
+                {},
             )
-            consent_scope[element.data_element]["consents"].append({
-                "purpose_id": consent.purpose_id,
-                "consent_status": consent.consent_status,
-                "purpose_shared": consent.shared,
-                "data_processors": consent.data_processors,
-                "purpose_cross_border": purpose_details.get("purpose_cross_border"),
-                "purpose_mandatory": purpose_details.get("purpose_mandatory"),
-                "purpose_legal": purpose_details.get("purpose_legal"),
-                "purpose_revokable": purpose_details.get("purpose_revokable"),
-                "purpose_encrypted": purpose_details.get("purpose_encrypted"),
-                "purpose_expiry": purpose_details.get("purpose_expiry"),
-                "purpose_retention": purpose_details.get("purpose_retention"),
-                "consent_timestamp": consent.consent_timestamp,
-            })
+            consent_scope[element.data_element]["consents"].append(
+                {
+                    "purpose_id": consent.purpose_id,
+                    "consent_status": consent.consent_status,
+                    "purpose_shared": consent.shared,
+                    "data_processors": consent.data_processors,
+                    "purpose_cross_border": purpose_details.get("purpose_cross_border"),
+                    "purpose_mandatory": purpose_details.get("purpose_mandatory"),
+                    "purpose_legal": purpose_details.get("purpose_legal"),
+                    "purpose_revokable": purpose_details.get("purpose_revokable"),
+                    "purpose_encrypted": purpose_details.get("purpose_encrypted"),
+                    "purpose_expiry": purpose_details.get("purpose_expiry"),
+                    "purpose_retention": purpose_details.get("purpose_retention"),
+                    "consent_timestamp": consent.consent_timestamp,
+                }
+            )
 
     # Convert the aggregated consent_scope to a list
     consent_scope_list = list(consent_scope.values())
@@ -185,6 +195,7 @@ async def post_consent_preference(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @consentRouter.get("/get-preferences", tags=["Consent Preference"])
 async def get_preferences(
