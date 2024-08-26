@@ -214,6 +214,44 @@ async def post_consent_preference(
             upsert=True,
         )
 
+
+        #updating the redis cache after posting the consent
+        cache_key = f"consent_preferences:{dp_id}:{df_id}"
+
+        # Transform the consent document into the format expected by get_preferences
+        consent_scope_list = consent_document.get("consent", {}).get("consent_scope", [])
+        grouped_result = defaultdict(list)
+
+        for scope in consent_scope_list:
+            data_element_key = scope.get("data_element")
+            for consent in scope.get("consents", []):
+                consent_data = {
+                    "cp_id": cp_id,
+                    "cp_name": consent_document["consent"].get("cp_name", ""),
+                    "de_name": data_element_key,  # Using the data element key as a placeholder for title
+                    "description": {
+                        "activity": "",  # Placeholder, can be enhanced with actual data
+                        "consent": consent.get("consent_timestamp", ""),
+                        "validTill": consent.get("purpose_expiry", ""),
+                        "agreement": consent_document["consent"].get("agreement_id", ""),
+                        "retentionTill": consent.get("purpose_retention", ""),
+                        "consent_status": consent.get("consent_status", ""),
+                        "consent_id": consent.get("purpose_id"),
+                        "revokedDate": consent.get("revoked_date", ""),
+                        "purpose_mandatory": consent.get("purpose_mandatory", {}),
+                        "purpose_legal": consent.get("purpose_legal", {}),
+                        "purpose_revokable": consent.get("purpose_revokable", False),
+                        "purpose_shared": consent.get("purpose_shared", False),
+                    },
+                }
+                grouped_result[data_element_key].append(consent_data)
+        
+        result = {name: consents for name, consents in grouped_result.items()}
+        
+        # Store the result in Redis with a 1-hour expiration time
+        r.set(cache_key, json.dumps(result), ex=3600)
+
+
         # Step 10: Return the response with the consent artifact and its hash
         return JSONResponse(
             content={
@@ -470,7 +508,7 @@ async def revoke_consent(
         #updating the redis cache after revoking the consent
         cache_key = f"consent_preferences:{dp_id}:{df_id}"
         r.delete(cache_key)
-        
+
         return {"detail": "Consent successfully revoked"}
     except WriteError as e:
         raise HTTPException(status_code=500, detail=f"Database write error: {str(e)}")
