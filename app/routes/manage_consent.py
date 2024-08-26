@@ -222,7 +222,7 @@ async def get_preferences(
 ) -> Dict[str, List[Dict]]:
     # Query the consent preferences collection
     documents = list(
-        consent_preferences_collection.find({"dp_id": dp_id, "df_id": df_id})
+        consent_preferences_collection.find({"dp_id": dp_id, "df_id": df_id, "is_active_consent_preference": True})
     )
 
     if not documents:
