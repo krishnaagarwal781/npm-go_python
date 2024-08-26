@@ -114,7 +114,7 @@ async def get_notice_info(
                                         "purpose_language": translated_purpose.get(
                                             "lang_title", ""
                                         ),
-                                        "pupose_expiry": purpose.get(
+                                        "purpose_expiry": purpose.get(
                                             "purpose_expiry", ""
                                         ),
                                         "purpose_retention": purpose.get(
