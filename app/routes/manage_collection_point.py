@@ -73,12 +73,18 @@ async def create_collection_point(
                         "purpose_language": purpose.purpose_language,
                         "purpose_expiry": de.expiry,
                         "purpose_retention": de.retention_period,
-                        "purpose_mandatory": False,
+                        "purpose_mandatory": {
+                            "mandatory_text": "",
+                            "mandatory_status": False,
+                        },
+                        "purpose_legal": {
+                            "legal_text": "",
+                            "legal_status": False,
+                        },
                         "purpose_revokable": False,
                         "purpose_encrypted": False,
                         "purpose_cross_border": False,
                         "purpose_shared": False,
-                        "purpose_legal": False,
                     }
                     for purpose in de.purposes
                 ],
@@ -89,12 +95,18 @@ async def create_collection_point(
                         "purpose_language": purpose.purpose_language,
                         "purpose_expiry": de.expiry,
                         "purpose_retention": de.retention_period,
-                        "purpose_mandatory": False,
+                        "purpose_mandatory": {
+                            "mandatory_text": "",
+                            "mandatory_status": False,
+                        },
+                        "purpose_legal": {
+                            "legal_text": "",
+                            "legal_status": False,
+                        },
                         "purpose_revokable": False,
                         "purpose_encrypted": False,
                         "purpose_cross_border": False,
                         "purpose_shared": False,
-                        "purpose_legal": False,
                     }
                     for purpose in de.purposes
                 ],
