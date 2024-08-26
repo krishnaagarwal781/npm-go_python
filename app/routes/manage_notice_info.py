@@ -15,6 +15,19 @@ from slowapi.util import get_remote_address
 from limits.storage import RedisStorage
 
 
+#Abhishek Redis Connection
+import redis
+import json
+
+
+#Abhishek Redis Connection
+r = redis.Redis(
+  host='redis-12042.c212.ap-south-1-1.ec2.redns.redis-cloud.com',
+  port=12042,
+  password='XPArYXZ1ENkQyQv31JoRpjnqnV49rvjD')
+
+
+
 # Initialize RedisStorage and Limiter
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
 storage = RedisStorage(redis_url)
@@ -33,6 +46,13 @@ async def get_notice_info(
     org_key: str = Header(...),
     org_secret: str = Header(...),
 ):
+    
+
+    # Check if the request is cached
+    cache_key = f"notice_info:{cp_id}:{app_id}:{org_id}"
+    cached_data = r.get(cache_key)
+    if cached_data:
+        return JSONResponse(content=json.loads(cached_data))
 
     # Verify the organization
     organisation = developer_details_collection.find_one(
@@ -96,10 +116,13 @@ async def get_notice_info(
                     translated_purposes = consent_directory_collection.find_one(
                         {"_id": ObjectId(purpose.get("translated_purpose_id"))}
                     )
+                    if translated_purposes["is_translated"]:
+                        fully_translated_purposes = True
                     if translated_purposes:
                         for translated_purpose in translated_purposes.get(
                             "purpose", []
                         ):
+                            
                             # Filter purposes by language
                             if (
                                 translated_purpose.get("lang_title", "").lower()
@@ -143,6 +166,8 @@ async def get_notice_info(
                 translated_data = translated_data_element_collection.find_one(
                     {"_id": ObjectId(de.get("translated_data_element_id"))}
                 )
+                if translated_data["is_translated"]:
+                    fully_translated_data = True
                 translated_text = None
                 if translated_data:
                     for text in translated_data.get("translated_elements", []):
@@ -183,5 +208,9 @@ async def get_notice_info(
                 "cp_url": collection_point.get("cp_url", ""),
                 "data_elements": data_elements,
             }
+
+            if fully_translated_data and fully_translated_purposes:
+                cache_key = f"notice_info:{cp_id}:{app_id}:{org_id}"
+                r.set(cache_key, json.dumps(notice_info), ex=3600)  # Cache for 1 hour (3600 seconds)
 
     return {"notice_info": notice_info}
