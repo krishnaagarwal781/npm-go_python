@@ -18,6 +18,7 @@ import json
 from typing import Dict, Any
 from uuid import uuid4
 from collections import defaultdict
+from pymongo.errors import WriteError
 
 consentRouter = APIRouter()
 
@@ -313,17 +314,18 @@ async def revoke_consent(
                             datetime.utcnow().isoformat()
                         )  # Set revoked_date
                     else:
+                        consent["consent_status"] = True
+                        
                         linked_agreement_id = (
                             document.get("consent_document", {})
                             .get("consent", {})
                             .get("agreement_id", "")
                         )
 
-                        consent["consent_status"] = True
 
                         # updating the consent's expiry date
                         current_expiry_date = datetime.fromisoformat(
-                            consent["expiry_date"]
+                            consent["purpose_expiry"]
                         )
 
                         # Calculate new expiry date
@@ -415,6 +417,7 @@ async def revoke_consent(
                 )
 
         return {"detail": "Consent successfully revoked"}
-
     except WriteError as e:
         raise HTTPException(status_code=500, detail=f"Database write error: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
