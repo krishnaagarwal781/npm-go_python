@@ -20,19 +20,7 @@ from uuid import uuid4
 from collections import defaultdict
 from pymongo.errors import WriteError
 
-#Abhishek Redis Connection
-import redis
-import json
-
-
 consentRouter = APIRouter()
-
-#Abhishek Redis Connection
-r = redis.Redis(
-  host='redis-12042.c212.ap-south-1-1.ec2.redns.redis-cloud.com',
-  port=12042,
-  password='XPArYXZ1ENkQyQv31JoRpjnqnV49rvjD')
-
 
 # Initialize RedisStorage and Limiter
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"  # Adjust the Redis URL as needed
@@ -234,17 +222,6 @@ async def get_preferences(
     df_id: str = Query(..., description="Data Fiduciary ID"),
 ) -> Dict[str, List[Dict]]:
     # Query the consent preferences collection
-
-    # Generate a unique cache key using dp_id and df_id
-    cache_key = f"consent_preferences:{dp_id}:{df_id}"
-
-    # Try to retrieve the data from Redis cache
-    cached_data = r.get(cache_key)
-    if cached_data:
-        # If cache hit, return the data from Redis
-        return json.loads(cached_data)
-
-
     documents = list(
         consent_preferences_collection.find({"dp_id": dp_id, "df_id": df_id, "is_active_consent_preference": True})
     )
@@ -328,8 +305,6 @@ async def get_preferences(
 
     # Convert the grouped result to the final format
     result = {name: consents for name, consents in grouped_result.items()}
-
-    r.set(cache_key, json.dumps(result), ex=3600)  # Cache for 1 hour (3600 seconds)
 
     return result
 
@@ -467,10 +442,6 @@ async def revoke_consent(
             raise HTTPException(
                 status_code=404, detail="Consent ID not found in the given preferences"
             )
-        
-        #updating the redis cache after revoking the consent
-        cache_key = f"consent_preferences:{dp_id}:{df_id}"
-        r.delete(cache_key)
 
         return {"detail": "Consent successfully revoked"}
     except WriteError as e:
