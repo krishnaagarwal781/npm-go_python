@@ -51,7 +51,7 @@ async def get_notice_info(
     # Initialize notice_info with URLs
     notice_info = {
         "urls": {
-            "logo": "https://freeimage.host/i/dWfACDQ",
+            "logo": "https://i.postimg.cc/BQbrXP4B/perfios-preview.png",
             "speakIcon": "https://www.svgrepo.com/show/165176/speaking.svg",
             "pauseIcon": "https://www.svgrepo.com/show/149256/pause-button.svg",
             "arrowIcon": "https://cdn.icon-icons.com/icons2/2248/PNG/512/arrow_top_right_icon_135926.png",
