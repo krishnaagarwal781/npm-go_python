@@ -49,9 +49,9 @@ def get_collection_point_with_translations(cp_id, org_id, app_id):
 def update_contract_status_for_all():
 
     # Fetch all documents in the collection
-    cps = collection_point.find({})
+    cps = collection_point_collection.find({})
 
-    headers = {"x-token": "string"}  # Replace with actual token if required
+    headers = {"x-token": "block_concur"}  # Replace with actual token if required
 
     # Iterate over each document
     for cp in cps:
@@ -59,6 +59,11 @@ def update_contract_status_for_all():
         if "cp_contract_id" not in cp:
             print(f"cp_contract_id not found for document with _id: {cp['_id']}")
             continue
+
+        # Check if txn_hash and contract_address are already set
+        if "txn_hash" in cp and "contract_address" in cp:
+            print(f"txn_hash and contract_address already set for document with _id: {cp['_id']}")
+            continue  # Skip updating this document
 
         cp_contract_id = cp["cp_contract_id"]
         url = f"http://127.0.0.1:8000/get-cp-status/{cp_contract_id}"
@@ -74,20 +79,24 @@ def update_contract_status_for_all():
                 txn_hash = response_data.get("txn_hash")
                 contract_address = response_data.get("contract_address")
 
-                # Update the document with txn_hash and contract_address
-                collection.update_one(
-                    {"_id": document["_id"]},
-                    {
-                        "$set": {
-                            "txn_hash": txn_hash,
-                            "contract_address": contract_address
+                # Only update if txn_hash and contract_address are not already set
+                if txn_hash and contract_address:
+                    collection_point_collection.update_one(
+                        {"_id": cp["_id"]},
+                        {
+                            "$set": {
+                                "txn_hash": txn_hash,
+                                "contract_address": contract_address
+                            }
                         }
-                    }
-                )
-                print(f"Updated document with _id: {document['_id']}")
+                    )
+                    print(f"Updated document with _id: {cp['_id']}")
+                else:
+                    print(f"Missing txn_hash or contract_address for _id: {cp['_id']}")
 
             else:
-                print(f"Contract not deployed for document with _id: {document['_id']}")
+                print(f"Contract not deployed for document with _id: {cp['_id']}")
 
         except requests.exceptions.RequestException as e:
-            print(f"An error occurred while checking contract status for _id: {document['_id']} - {str(e)}")
+            print(f"An error occurred while checking contract status for _id: {cp['_id']} - {str(e)}")
+

@@ -23,7 +23,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(update_contract_status_for_all, "interval", seconds=10) 
+scheduler.add_job(update_contract_status_for_all, "interval", minutes=10) 
 scheduler.start()
 
 def timeit_wrapper(func):
