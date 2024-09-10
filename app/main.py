@@ -11,6 +11,8 @@ from app.routes import (
     manage_notice_info,
     manage_consent,
 )
+from apscheduler.schedulers.background import BackgroundScheduler
+from app.schemas.utils import update_contract_status_for_all
 
 app = FastAPI()
 redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us-east-1-2.ec2.cloud.redislabs.com:11722/0"
@@ -19,6 +21,10 @@ redis_url = "redis://default:GtOhsmeCwPJsZC8B0A8R2ihcA7pDVXem@redis-11722.c44.us
 limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(update_contract_status_for_all, "interval", seconds=10) 
+scheduler.start()
 
 def timeit_wrapper(func):
     async def wrapper(request: Request):
@@ -35,6 +41,11 @@ def timeit_wrapper(func):
 @timeit_wrapper
 async def read_root(request: Request):
     return {"message": "Welcome bhidu"}
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.shutdown()
 
 app.include_router(register_user.registerUser)
 app.include_router(manage_collection_point.collectionRouter)

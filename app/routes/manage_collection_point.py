@@ -127,6 +127,93 @@ async def create_collection_point(
     cp_id = str(cp_result.inserted_id)
     cp_url = f"demo.api.com/{cp_id}"
 
+    external_api_url = "http://127.0.0.1:8000/post-cp-to-cf"
+
+    # Construct the payload for the external API using the collected data
+    external_payload = {
+        "org_id": org_id,
+        "application_id": application_id,
+        "cp_name": data.cp_name,
+        "cp_status": "active",
+        "data_elements": [
+            {
+                "data_element": de.data_element,
+                "data_element_collection_status": "active",
+                "data_element_title": de.data_element_title,
+                "data_element_description": de.data_element_description,
+                "data_owner": de.data_owner,
+                "legal_basis": de.legal_basis,
+                "retention_period": de.retention_period,
+                "cross_border": False,
+                "sensitive": False,
+                "encrypted": False,
+                "expiry": de.expiry,
+                "purposes": [
+                    {
+                        "purpose_id": purpose.purpose_id,
+                        "purpose_description": purpose.purpose_description,
+                        "purpose_language": purpose.purpose_language,
+                        "translated_purpose_id": "",  # Adjust as needed
+                        "purpose_expiry": de.expiry,
+                        "purpose_retention": de.retention_period,
+                        "purpose_mandatory": {
+                            "mandatory_text": "",
+                            "mandatory_status": False,
+                        },
+                        "purpose_revokable": False,
+                        "purpose_encrypted": False,
+                        "purpose_cross_border": False,
+                        "purpose_shared": False,
+                        "purpose_legal": {
+                            "legal_text": "",
+                            "legal_status": False,
+                        },
+                    }
+                    for purpose in de.purposes
+                ],
+            }
+            for de in data.data_elements
+        ],
+        "registered_at": str(datetime.datetime.utcnow()),
+        "cp_url": cp_url,
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-token": "block_concur",
+    }
+
+    try:
+        external_response = requests.post(
+            external_api_url, json=external_payload, headers=headers
+        )
+        external_response.raise_for_status()
+        external_response_data = external_response.json()
+        cp_contract_id = external_response_data.get("cp_contract_id")
+        if not cp_contract_id:
+            raise HTTPException(
+                status_code=500,
+                detail="External API did not return a cp_contract_id"
+            )
+
+        # Update the collection point document with the `cp_contract_id`
+        try:
+            collection_point_collection.update_one(
+                {"_id": cp_result.inserted_id},
+                {"$set": {"cp_contract_id": cp_contract_id}}
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update collection point with cp_contract_id: {str(e)}"
+            )
+
+    except requests.RequestException as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send data to external API: {str(e)}",
+        )
+
     try:
         collection_point_collection.update_one(
             {"_id": cp_result.inserted_id}, {"$set": {"cp_url": cp_url}}

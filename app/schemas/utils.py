@@ -45,3 +45,49 @@ def get_collection_point_with_translations(cp_id, org_id, app_id):
         return notice_info
 
     return None
+
+def update_contract_status_for_all():
+
+    # Fetch all documents in the collection
+    cps = collection_point.find({})
+
+    headers = {"x-token": "string"}  # Replace with actual token if required
+
+    # Iterate over each document
+    for cp in cps:
+        # Check if cp_contract_id exists in the document
+        if "cp_contract_id" not in cp:
+            print(f"cp_contract_id not found for document with _id: {cp['_id']}")
+            continue
+
+        cp_contract_id = cp["cp_contract_id"]
+        url = f"http://127.0.0.1:8000/get-cp-status/{cp_contract_id}"
+
+        try:
+            # Make a GET request to check the contract status
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            response_data = response.json()
+
+            # Check if the blockchain_status is 'deployed'
+            if response_data.get("blockchain_status") == "deployed":
+                txn_hash = response_data.get("txn_hash")
+                contract_address = response_data.get("contract_address")
+
+                # Update the document with txn_hash and contract_address
+                collection.update_one(
+                    {"_id": document["_id"]},
+                    {
+                        "$set": {
+                            "txn_hash": txn_hash,
+                            "contract_address": contract_address
+                        }
+                    }
+                )
+                print(f"Updated document with _id: {document['_id']}")
+
+            else:
+                print(f"Contract not deployed for document with _id: {document['_id']}")
+
+        except requests.exceptions.RequestException as e:
+            print(f"An error occurred while checking contract status for _id: {document['_id']} - {str(e)}")
