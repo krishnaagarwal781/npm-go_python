@@ -1,0 +1,28 @@
+version: "1.0"
+organisation_id: "6698c46f4a899110a27d7e04"
+applications:
+  - application_id: "021643bb4f44fa0a"
+    type: "web app"
+    name: "flipboo"
+    stage: "development"
+    application_user: "global"
+    collection_points_data:
+      - cp_id: "6698c6a1bd6d113ade6d8ac4"
+        cp_name: "mastibolo"
+        cp_status: "active"
+        cp_url: "acitve.com"
+        data_elements:
+          - data_element: "<Blank>"
+            data_element_collection_status: "active"
+            data_element_title: "address"
+            data_element_description: "<Blank>"
+            data_owner: "<Blank>"
+            legal_basis: "<Blank>"
+            retention_period: "<Number> <days, month, year>"
+            cross_border: false
+            sensitive: false
+            encrypted: false
+            expiry: "<Number> <days, month, year>"
+            purposes:
+              - purpose_description: "<masti>"
+                purpose_language: "<EN, EU, HIN>"

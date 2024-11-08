@@ -1,0 +1,36 @@
+version: "1.0"
+organisation_id: "66b337960a401f1b04aa78a9"
+applications:
+  - application_id: "0f2c214c1a63e796"
+    type: "web app"
+    name: "flipkart"
+    stage: "development"
+    application_user: "india"
+    collection_points_data:
+      - cp_id: "66b338ae0a401f1b04aa78ac"
+        cp_name: "Register Form"
+        cp_status: "active"
+        cp_url: "demo.api.com/66b338ae0a401f1b04aa78ac"
+        data_elements:
+          - data_element: "home_address"
+            data_element_collection_status: "active"
+            data_element_title: "Home Address of User"
+            data_element_description: "This is the description of the user"
+            data_owner:
+              - "masti"
+            legal_basis: true
+            retention_period: 20
+            cross_border: false
+            sensitive: false
+            encrypted: false
+            expiry: 30
+            purposes:
+              - purpose_id: "6d6611de7d7b6fd6"
+                purpose_description: "This data is been taken for other purposes and mast"
+                purpose_language: "en"
+              - purpose_id: null
+                purpose_description: "This data is been taken for other masti"
+                purpose_language: "en"
+              - purpose_id: null
+                purpose_description: "This data is been taken for SMOE masti"
+                purpose_language: "en"
